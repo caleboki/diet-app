@@ -66,4 +66,29 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function dietaryProfiles()
+    {
+        return $this->hasMany(UserDietaryProfile::class);
+    }
+
+    public function activeDietaryProfile()
+    {
+        return $this->hasOne(UserDietaryProfile::class)->where('is_active', true);
+    }
+
+    public function savedRecipes()
+    {
+        return $this->hasMany(SavedRecipe::class);
+    }
+
+    public function groceryLists()
+    {
+        return $this->hasMany(GroceryList::class);
+    }
+
+    public function recipeModifications()
+    {
+        return $this->hasMany(RecipeModification::class);
+    }
 }
