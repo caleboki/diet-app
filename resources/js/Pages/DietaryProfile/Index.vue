@@ -31,10 +31,7 @@ const deleteProfile = () => {
 const setActiveProfile = (profile) => {
     if (profile.is_active) return;
     
-    router.put(route('dietary-profile.update', profile.id), {
-        name: profile.name,
-        is_active: true,
-    });
+    router.put(route('dietary-profile.set-active', profile.id));
 };
 </script>
 

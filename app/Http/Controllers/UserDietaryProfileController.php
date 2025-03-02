@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Log;
 
 class UserDietaryProfileController extends Controller
 {
@@ -66,7 +67,6 @@ class UserDietaryProfileController extends Controller
             'medical_conditions.*.severity' => 'required|in:mild,moderate,severe',
             'dietary_restrictions' => 'array',
             'dietary_restrictions.*.id' => 'required|exists:dietary_restrictions,id',
-            'dietary_restrictions.*.severity' => 'required|in:mild,moderate,severe',
             'dietary_restrictions.*.notes' => 'nullable|string|max:1000',
         ]);
 
@@ -81,7 +81,7 @@ class UserDietaryProfileController extends Controller
         $profile->description = $validated['description'] ?? null;
         $profile->is_active = true;
         $profile->save();
-
+        
         // Sync medical conditions with severity
         $medicalConditionData = [];
         foreach ($validated['medical_conditions'] ?? [] as $condition) {
@@ -89,15 +89,8 @@ class UserDietaryProfileController extends Controller
         }
         $profile->medicalConditions()->sync($medicalConditionData);
 
-        // Sync dietary restrictions with severity and notes
-        $dietaryRestrictionData = [];
-        foreach ($validated['dietary_restrictions'] ?? [] as $restriction) {
-            $dietaryRestrictionData[$restriction['id']] = [
-                'severity' => $restriction['severity'],
-                'notes' => $restriction['notes'] ?? null
-            ];
-        }
-        $profile->dietaryRestrictions()->sync($dietaryRestrictionData);
+        // Determine and sync dietary restrictions with calculated severity
+        $this->syncDietaryRestrictionsWithCalculatedSeverity($profile, $validated['dietary_restrictions'] ?? []);
 
         // Return to the dashboard instead of the dietary-profile index
         return redirect()->route('dashboard')
@@ -111,7 +104,7 @@ class UserDietaryProfileController extends Controller
     {
         $this->authorize('view', $userDietaryProfile);
         
-        $userDietaryProfile->load('dietaryRestrictions', 'medicalConditions', 'user');
+        $userDietaryProfile->load(['dietaryRestrictions', 'medicalConditions', 'user']);
         
         return Inertia::render('DietaryProfile/Show', [
             'profile' => $userDietaryProfile,
@@ -125,7 +118,7 @@ class UserDietaryProfileController extends Controller
     {
         $this->authorize('update', $userDietaryProfile);
         
-        $userDietaryProfile->load('dietaryRestrictions', 'medicalConditions');
+        $userDietaryProfile->load(['dietaryRestrictions', 'medicalConditions']);
         $medicalConditions = MedicalCondition::all();
         $commonDietaryRestrictions = DietaryRestriction::where('is_common_allergen', true)->get();
         
@@ -148,6 +141,11 @@ class UserDietaryProfileController extends Controller
         // Authorize the request
         $this->authorize('update', $userDietaryProfile);
         
+        // Check if this is just setting the profile as active
+        if ($request->has('is_active') && count($request->all()) <= 2) {
+            return $this->setActive($userDietaryProfile);
+        }
+        
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
@@ -156,7 +154,6 @@ class UserDietaryProfileController extends Controller
             'medical_conditions.*.severity' => 'required|in:mild,moderate,severe',
             'dietary_restrictions' => 'array',
             'dietary_restrictions.*.id' => 'required|exists:dietary_restrictions,id',
-            'dietary_restrictions.*.severity' => 'required|in:mild,moderate,severe',
             'dietary_restrictions.*.notes' => 'nullable|string|max:1000',
         ]);
 
@@ -172,15 +169,8 @@ class UserDietaryProfileController extends Controller
         }
         $userDietaryProfile->medicalConditions()->sync($medicalConditionData);
 
-        // Sync dietary restrictions with severity and notes
-        $dietaryRestrictionData = [];
-        foreach ($validated['dietary_restrictions'] ?? [] as $restriction) {
-            $dietaryRestrictionData[$restriction['id']] = [
-                'severity' => $restriction['severity'],
-                'notes' => $restriction['notes'] ?? null
-            ];
-        }
-        $userDietaryProfile->dietaryRestrictions()->sync($dietaryRestrictionData);
+        // Determine and sync dietary restrictions with calculated severity
+        $this->syncDietaryRestrictionsWithCalculatedSeverity($userDietaryProfile, $validated['dietary_restrictions'] ?? []);
 
         // Return to the dashboard instead of the dietary-profile index
         return redirect()->route('dashboard')
@@ -199,5 +189,88 @@ class UserDietaryProfileController extends Controller
         
         return redirect()->route('dietary-profile.index')
             ->with('message', 'Dietary profile deleted successfully.');
+    }
+
+    /**
+     * Set a specific dietary profile as active
+     * 
+     * @param UserDietaryProfile $userDietaryProfile
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function setActive(UserDietaryProfile $userDietaryProfile)
+    {
+        $this->authorize('update', $userDietaryProfile);
+        
+        // Set all other profiles as inactive
+        Auth::user()->dietaryProfiles()->update(['is_active' => false]);
+        
+        // Set this profile as active
+        $userDietaryProfile->is_active = true;
+        $userDietaryProfile->save();
+        
+        return redirect()->back()
+            ->with('success', 'Active dietary profile updated successfully.');
+    }
+
+    /**
+     * Calculate and sync dietary restrictions with severity derived from medical conditions
+     * 
+     * @param UserDietaryProfile $profile
+     * @param array $dietaryRestrictions
+     */
+    private function syncDietaryRestrictionsWithCalculatedSeverity(UserDietaryProfile $profile, array $dietaryRestrictions)
+    {
+        // First, load the medical conditions with their severity
+        $profile->load('medicalConditions');
+        $medicalConditions = $profile->medicalConditions;
+        
+        $dietaryRestrictionData = [];
+        
+        foreach ($dietaryRestrictions as $restriction) {
+            // Get the highest severity from related medical conditions
+            // In a real app, you'd have a mapping between medical conditions and dietary restrictions
+            // For now, we'll use the highest severity from any medical condition as a simplification
+            $calculatedSeverity = $this->calculateRestrictionSeverity($medicalConditions);
+            
+            $dietaryRestrictionData[$restriction['id']] = [
+                'severity' => $calculatedSeverity,
+                'notes' => $restriction['notes'] ?? null
+            ];
+            
+            Log::info("Set dietary restriction {$restriction['id']} severity to {$calculatedSeverity}");
+        }
+        
+        $profile->dietaryRestrictions()->sync($dietaryRestrictionData);
+    }
+    
+    /**
+     * Calculate the appropriate severity for a dietary restriction
+     * based on related medical conditions
+     * 
+     * @param \Illuminate\Database\Eloquent\Collection $medicalConditions
+     * @return string
+     */
+    private function calculateRestrictionSeverity($medicalConditions)
+    {
+        // Simple algorithm: take the highest severity from any medical condition
+        // In a real app, this would be more sophisticated based on specific condition-restriction relationships
+        $severityMapping = [
+            'mild' => 1,
+            'moderate' => 2,
+            'severe' => 3
+        ];
+        
+        $highestSeverity = 'mild'; // default
+        $highestValue = 0;
+        
+        foreach ($medicalConditions as $condition) {
+            $severityValue = $severityMapping[$condition->pivot->severity] ?? 0;
+            if ($severityValue > $highestValue) {
+                $highestValue = $severityValue;
+                $highestSeverity = $condition->pivot->severity;
+            }
+        }
+        
+        return $highestSeverity;
     }
 }

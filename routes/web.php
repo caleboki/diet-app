@@ -33,6 +33,7 @@ Route::middleware([
         Route::get('/{userDietaryProfile}/edit', [UserDietaryProfileController::class, 'edit'])->name('edit');
         Route::put('/{userDietaryProfile}', [UserDietaryProfileController::class, 'update'])->name('update');
         Route::delete('/{userDietaryProfile}', [UserDietaryProfileController::class, 'destroy'])->name('destroy');
+        Route::put('/{userDietaryProfile}/set-active', [UserDietaryProfileController::class, 'setActive'])->name('set-active');
     });
 
     // API Routes for Medical Conditions and Dietary Restrictions
