@@ -32,7 +32,7 @@ const setActiveProfile = (profile) => {
     if (profile.is_active) return;
     
     router.put(route('dietary-profile.update', profile.id), {
-        profile_name: profile.profile_name,
+        name: profile.name,
         is_active: true,
     });
 };
