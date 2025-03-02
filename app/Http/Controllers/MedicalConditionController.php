@@ -10,9 +10,17 @@ class MedicalConditionController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        //
+        $query = $request->input('query');
+        
+        $conditions = MedicalCondition::when($query, function ($q) use ($query) {
+                return $q->where('name', 'like', "%{$query}%");
+            })
+            ->orderBy('name')
+            ->get();
+            
+        return response()->json($conditions);
     }
 
     /**
@@ -61,5 +69,15 @@ class MedicalConditionController extends Controller
     public function destroy(MedicalCondition $medicalCondition)
     {
         //
+    }
+    
+    /**
+     * Get dietary restrictions associated with a medical condition.
+     */
+    public function restrictions(MedicalCondition $medicalCondition)
+    {
+        $restrictions = $medicalCondition->dietaryRestrictions()->get();
+        
+        return response()->json($restrictions);
     }
 }

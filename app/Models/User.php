@@ -74,7 +74,9 @@ class User extends Authenticatable
 
     public function activeDietaryProfile()
     {
-        return $this->hasOne(UserDietaryProfile::class)->where('is_active', true);
+        return $this->hasOne(UserDietaryProfile::class)
+            ->where('is_active', true)
+            ->with(['dietaryRestrictions', 'medicalConditions']);
     }
 
     public function savedRecipes()

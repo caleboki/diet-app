@@ -3,6 +3,9 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use App\Http\Controllers\UserDietaryProfileController;
+use App\Http\Controllers\MedicalConditionController;
+use App\Http\Controllers\DietaryRestrictionController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -21,4 +24,21 @@ Route::middleware([
     Route::get('/dashboard', function () {
         return Inertia::render('Dashboard');
     })->name('dashboard');
+
+    // Dietary Profile Routes
+    Route::prefix('dietary-profile')->name('dietary-profile.')->group(function () {
+        Route::get('/', [UserDietaryProfileController::class, 'index'])->name('index');
+        Route::get('/create', [UserDietaryProfileController::class, 'create'])->name('create');
+        Route::post('/', [UserDietaryProfileController::class, 'store'])->name('store');
+        Route::get('/{userDietaryProfile}', [UserDietaryProfileController::class, 'show'])->name('show');
+        Route::get('/{userDietaryProfile}/edit', [UserDietaryProfileController::class, 'edit'])->name('edit');
+        Route::put('/{userDietaryProfile}', [UserDietaryProfileController::class, 'update'])->name('update');
+        Route::delete('/{userDietaryProfile}', [UserDietaryProfileController::class, 'destroy'])->name('destroy');
+    });
+
+    // API Routes for Medical Conditions and Dietary Restrictions
+    Route::get('/medical-conditions', [MedicalConditionController::class, 'index'])->name('medical-conditions.index');
+    Route::get('/dietary-restrictions', [DietaryRestrictionController::class, 'index'])->name('dietary-restrictions.index');
+    Route::get('/medical-conditions/{medicalCondition}/restrictions', [MedicalConditionController::class, 'restrictions'])
+        ->name('medical-conditions.restrictions');
 });
