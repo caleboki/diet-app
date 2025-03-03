@@ -208,12 +208,20 @@ const formatDate = (dateString) => {
                             <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
                                 Last updated: {{ formatDate(profile.updated_at) }}
                             </div>
-                            <div class="mt-3">
+                            <div class="mt-3 flex space-x-3">
                                 <Link 
                                     :href="route('dietary-profile.show', profile.id)" 
                                     class="text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                                 >
                                     View details →
+                                </Link>
+                                <Link 
+                                    v-if="!profile.is_active"
+                                    method="put"
+                                    :href="route('dietary-profile.set-active', profile.id)"
+                                    class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                                >
+                                    Set as active
                                 </Link>
                             </div>
                         </div>
