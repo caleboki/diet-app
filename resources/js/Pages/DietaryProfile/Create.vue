@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -19,8 +19,9 @@ const props = defineProps({
 
 // Form state
 const currentStep = ref('medical-conditions');
-const form = reactive({
+const form = useForm({
     name: '',
+    description: '',
     is_active: true,
     medical_conditions: [],
     dietary_restrictions: []
@@ -47,32 +48,35 @@ const toggleMedicalCondition = (condition) => {
     const index = form.medical_conditions.findIndex(c => c.id === condition.id);
     
     if (index >= 0) {
-        // Remove condition
-        form.medical_conditions.splice(index, 1);
+        // Remove condition - create a new array to ensure reactivity
+        const updatedConditions = [...form.medical_conditions];
+        updatedConditions.splice(index, 1);
+        form.medical_conditions = updatedConditions;
         
-        // Remove any dietary restrictions that were only recommended by this condition
+        // Update recommended restrictions
         updateRecommendedRestrictions();
     } else {
-        // Add condition
-        form.medical_conditions.push({
+        // Add condition - create a new array to ensure reactivity
+        const updatedConditions = [...form.medical_conditions];
+        updatedConditions.push({
             id: condition.id,
             name: condition.name,
             severity: 'moderate' // Default severity
         });
+        form.medical_conditions = updatedConditions;
         
-        // Add recommended dietary restrictions based on this condition
+        // Update recommended restrictions
         updateRecommendedRestrictions();
     }
 };
 
 // Get recommended dietary restrictions based on selected medical conditions
 const updateRecommendedRestrictions = () => {
-    // This would be a more sophisticated mapping in a production app
-    // For now, we're using a simplified mapping for demonstration
-    
-    // Clear any previous recommendations to recalculate
+    // Get a copy of all user manually selected restrictions to preserve them
     const userManualSelections = [...form.dietary_restrictions];
-    form.dietary_restrictions = [];
+    
+    // Create a new array to ensure reactivity
+    let updatedRestrictions = [];
     
     // Map of medical condition IDs to recommended dietary restriction IDs
     const conditionToRestrictionMap = {
@@ -104,29 +108,19 @@ const updateRecommendedRestrictions = () => {
             // Check if this was previously selected (to preserve notes)
             const previousSelection = userManualSelections.find(r => r.id === restriction.id);
             
-            // Add to form.dietary_restrictions, preserving notes if existed
+            // Add to updatedRestrictions, preserving notes if existed
             const severity = deriveSeverity(restriction.id);
-            form.dietary_restrictions.push({
+            updatedRestrictions.push({
                 id: restriction.id,
                 name: restriction.name,
-                severity: severity,
-                notes: previousSelection?.notes || ''
+                severity: previousSelection ? previousSelection.severity : severity,
+                notes: previousSelection ? previousSelection.notes : ''
             });
         }
     });
-};
-
-// Update medical condition details
-const updateConditionDetails = (conditionId, field, value) => {
-    const index = form.medical_conditions.findIndex(c => c.id === conditionId);
-    if (index >= 0) {
-        form.medical_conditions[index][field] = value;
-    }
-};
-
-// Check if a medical condition is selected
-const isMedicalConditionSelected = (conditionId) => {
-    return form.medical_conditions.some(c => c.id === conditionId);
+    
+    // Set the form data with the new array to ensure reactivity
+    form.dietary_restrictions = updatedRestrictions;
 };
 
 // Derive restriction severity based on medical condition severity
@@ -167,23 +161,52 @@ const deriveSeverity = (restrictionId) => {
     return derivedSeverity;
 };
 
+// Update medical condition details
+const updateConditionDetails = (conditionId, field, value) => {
+    const index = form.medical_conditions.findIndex(c => c.id === conditionId);
+    if (index >= 0) {
+        // Create a new array to ensure reactivity
+        const updatedConditions = [...form.medical_conditions];
+        updatedConditions[index] = {
+            ...updatedConditions[index],
+            [field]: value
+        };
+        
+        // Set the form data with the new array
+        form.medical_conditions = updatedConditions;
+        
+        // If severity was updated, we may need to update recommended restrictions
+        if (field === 'severity') {
+            updateRecommendedRestrictions();
+        }
+    }
+};
+
+// Check if a medical condition is selected
+const isMedicalConditionSelected = (conditionId) => {
+    return form.medical_conditions.some(c => c.id === conditionId);
+};
+
 // Override the toggleDietaryRestriction function to distinguish manual vs. recommended
 const toggleDietaryRestriction = (restriction) => {
     const index = form.dietary_restrictions.findIndex(r => r.id === restriction.id);
     
     if (index >= 0) {
-        // Remove restriction
-        form.dietary_restrictions.splice(index, 1);
+        // Remove restriction - create a new array to ensure reactivity
+        const updatedRestrictions = [...form.dietary_restrictions];
+        updatedRestrictions.splice(index, 1);
+        form.dietary_restrictions = updatedRestrictions;
     } else {
-        // Add restriction
-        const derivedSeverity = deriveSeverity(restriction.id);
-        
-        form.dietary_restrictions.push({
+        // Add restriction - create a new array to ensure reactivity
+        const updatedRestrictions = [...form.dietary_restrictions];
+        updatedRestrictions.push({
             id: restriction.id,
             name: restriction.name,
-            severity: derivedSeverity,
+            severity: 'moderate', // Fixed severity since it's derived from medical conditions
             notes: ''
         });
+        
+        form.dietary_restrictions = updatedRestrictions;
     }
 };
 
@@ -196,7 +219,15 @@ const isDietaryRestrictionSelected = (restrictionId) => {
 const updateRestrictionDetails = (restrictionId, field, value) => {
     const index = form.dietary_restrictions.findIndex(r => r.id === restrictionId);
     if (index >= 0) {
-        form.dietary_restrictions[index][field] = value;
+        // Create a new array to ensure reactivity
+        const updatedRestrictions = [...form.dietary_restrictions];
+        updatedRestrictions[index] = {
+            ...updatedRestrictions[index],
+            [field]: value
+        };
+        
+        // Set the form data with the new array
+        form.dietary_restrictions = updatedRestrictions;
     }
 };
 
@@ -217,12 +248,46 @@ const isRestrictionRecommended = (restrictionId) => {
 
 // Navigate to next step
 const nextStep = () => {
-    const stepsArray = Object.keys(props.steps);
-    const currentIndex = stepsArray.indexOf(currentStep.value);
+    // Validate current step before proceeding
+    const stepValidations = {
+        'medical-conditions': () => {
+            // Validate that at least one medical condition is selected
+            if (form.medical_conditions.length === 0) {
+                errors.value = { 'medical_conditions': 'Please select at least one medical condition' };
+                return false;
+            }
+            return true;
+        },
+        'dietary-restrictions': () => {
+            // No validation required for dietary restrictions as they may be optional
+            return true;
+        },
+        'profile-details': () => {
+            // Validate profile name
+            if (!form.name.trim()) {
+                errors.value = { 'name': 'Profile name is required' };
+                return false;
+            }
+            return true;
+        },
+        'review': () => true // No validation needed for review step
+    };
+
+    // Get validation function for current step
+    const validateStep = stepValidations[currentStep.value];
     
-    if (currentIndex < stepsArray.length - 1) {
-        currentStep.value = stepsArray[currentIndex + 1];
-        window.scrollTo(0, 0);
+    // If validation passes, proceed to next step
+    if (validateStep && validateStep()) {
+        const stepsArray = Object.keys(props.steps);
+        const currentIndex = stepsArray.indexOf(currentStep.value);
+        
+        if (currentIndex < stepsArray.length - 1) {
+            // Clear errors before moving to next step
+            errors.value = {};
+            // Update step
+            currentStep.value = stepsArray[currentIndex + 1];
+            window.scrollTo(0, 0);
+        }
     }
 };
 
@@ -241,14 +306,16 @@ const prevStep = () => {
 const submit = () => {
     processing.value = true;
     
-    router.post(route('dietary-profile.store'), form, {
+    form.post(route('dietary-profile.store'), {
         onSuccess: () => {
+            console.log('Form submitted successfully');
             processing.value = false;
         },
-        onError: (e) => {
-            errors.value = e;
+        onError: (errors) => {
+            console.error('Form submission errors:', errors);
             processing.value = false;
-        }
+        },
+        preserveScroll: true
     });
 };
 
@@ -273,11 +340,8 @@ onMounted(() => {
             severity: restriction.pivot.severity,
             notes: restriction.pivot.notes || ''
         }));
-    }
-    
-    // If creating a new profile and medical conditions are selected,
-    // update the recommended dietary restrictions
-    if (!props.userDietaryProfile && form.medical_conditions.length > 0) {
+        
+        // Update recommended restrictions based on selected medical conditions
         updateRecommendedRestrictions();
     }
 });
@@ -356,14 +420,13 @@ onMounted(() => {
                                     />
                                     <label 
                                         :for="`condition-${condition.id}`" 
-                                        class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+                                        class="ml-2 font-medium"
                                     >
                                         {{ condition.name }}
                                     </label>
                                 </div>
                                 <p 
-                                    v-if="condition.description" 
-                                    class="mt-1 ml-7 text-xs text-gray-500 dark:text-gray-400"
+                                    class="text-sm ml-7 text-gray-500"
                                 >
                                     {{ condition.description }}
                                 </p>
@@ -485,26 +548,10 @@ onMounted(() => {
                                                     </p>
                                                     <div v-if="isDietaryRestrictionSelected(restriction.id)" class="mt-3 space-y-3">
                                                         <div>
-                                                            <InputLabel :for="`severity-${restriction.id}`" value="Severity (Based on your medical conditions)" class="text-xs" />
-                                                            <select 
-                                                                :id="`severity-${restriction.id}`" 
-                                                                class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm text-sm bg-gray-100 dark:bg-gray-800"
-                                                                :value="form.dietary_restrictions.find(r => r.id === restriction.id)?.severity"
-                                                                disabled
-                                                            >
-                                                                <option value="mild">Mild (occasional consumption acceptable)</option>
-                                                                <option value="moderate">Moderate (limited consumption only)</option>
-                                                                <option value="severe">Severe (complete avoidance necessary)</option>
-                                                            </select>
-                                                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
-                                                                Severity is automatically determined based on your medical conditions
-                                                            </p>
-                                                        </div>
-                                                        <div>
                                                             <InputLabel :for="`notes-${restriction.id}`" value="Personal Notes" class="text-xs" />
                                                             <textarea 
                                                                 :id="`notes-${restriction.id}`" 
-                                                                class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm text-sm"
+                                                                class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 focus:ring-indigo-500 focus:ring-offset-2 rounded-md shadow-sm text-sm"
                                                                 :value="form.dietary_restrictions.find(r => r.id === restriction.id)?.notes"
                                                                 @input="updateRestrictionDetails(restriction.id, 'notes', $event.target.value)"
                                                             />

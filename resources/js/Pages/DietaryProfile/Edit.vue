@@ -1,7 +1,7 @@
 <script setup>
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 
 const props = defineProps({
     profile: Object,
@@ -9,27 +9,30 @@ const props = defineProps({
     commonDietaryRestrictions: Array,
 });
 
+// Simple direct form
 const form = useForm({
-    name: props.profile.name,
-    description: props.profile.description || '',
-    medical_conditions: props.profile.medical_conditions.map(condition => ({
+    name: props.profile?.name || '',
+    description: props.profile?.description || '',
+    medical_conditions: props.profile?.medical_conditions?.map(condition => ({
         id: condition.id,
-        severity: condition.pivot.severity
-    })),
-    dietary_restrictions: props.profile.dietary_restrictions.map(restriction => ({
+        severity: condition.pivot?.severity || 'mild'
+    })) || [],
+    dietary_restrictions: props.profile?.dietary_restrictions?.map(restriction => ({
         id: restriction.id,
-        notes: restriction.pivot.notes || ''
-    })),
+        name: restriction.name,
+        severity: restriction.pivot?.severity || 'mild',
+        notes: restriction.pivot?.notes || ''
+    })) || []
 });
 
+// Computed property to filter out already selected conditions
 const availableMedicalConditions = computed(() => {
-    // Filter out conditions already selected
     const selectedIds = form.medical_conditions.map(c => c.id);
     return props.medicalConditions.filter(c => !selectedIds.includes(c.id));
 });
 
+// Computed property to filter available dietary restrictions
 const availableDietaryRestrictions = computed(() => {
-    // Filter out restrictions already selected
     const selectedIds = form.dietary_restrictions.map(r => r.id);
     return props.commonDietaryRestrictions.filter(r => !selectedIds.includes(r.id));
 });
@@ -40,45 +43,78 @@ const severityOptions = [
     { value: 'severe', label: 'Severe' },
 ];
 
-const addMedicalCondition = (conditionId) => {
-    const condition = props.medicalConditions.find(c => c.id === conditionId);
+// Function to add a medical condition
+const addMedicalCondition = () => {
+    if (!selectedConditionId.value) return;
+    
+    const condition = props.medicalConditions.find(c => c.id === Number(selectedConditionId.value));
     if (condition) {
-        form.medical_conditions.push({
+        // Create a completely new array
+        const updatedConditions = [...form.medical_conditions];
+        updatedConditions.push({
             id: condition.id,
-            severity: 'mild'
+            severity: 'moderate' // Default severity
         });
+        
+        // Set the form data with the new array
+        form.medical_conditions = updatedConditions;
+        
+        // Reset the selection
+        selectedConditionId.value = '';
     }
 };
 
+// Function to remove a medical condition
 const removeMedicalCondition = (index) => {
-    form.medical_conditions.splice(index, 1);
+    // Create a completely new array
+    const updatedConditions = [...form.medical_conditions];
+    updatedConditions.splice(index, 1);
+    form.medical_conditions = updatedConditions;
 };
 
-const addDietaryRestriction = (restrictionId) => {
-    const restriction = props.commonDietaryRestrictions.find(r => r.id === restrictionId);
+// Function to add a dietary restriction
+const addDietaryRestriction = () => {
+    if (!selectedDietaryRestrictionId.value) return;
+    
+    const restriction = props.commonDietaryRestrictions.find(r => r.id === Number(selectedDietaryRestrictionId.value));
     if (restriction) {
-        form.dietary_restrictions.push({
+        // Create a completely new array to ensure reactivity
+        const updatedRestrictions = [...form.dietary_restrictions];
+        updatedRestrictions.push({
             id: restriction.id,
+            name: restriction.name,
+            severity: 'moderate', // Fixed severity since it's derived from medical conditions
             notes: ''
         });
+        
+        // Set the form data with the new array
+        form.dietary_restrictions = updatedRestrictions;
+        
+        // Reset the selection
+        selectedDietaryRestrictionId.value = '';
     }
 };
 
+// Function to remove a dietary restriction
 const removeDietaryRestriction = (index) => {
-    form.dietary_restrictions.splice(index, 1);
+    // Create a completely new array to ensure reactivity
+    const updatedRestrictions = [...form.dietary_restrictions];
+    updatedRestrictions.splice(index, 1);
+    form.dietary_restrictions = updatedRestrictions;
 };
 
+// Function to submit the form
 const submit = () => {
     form.put(route('dietary-profile.update', props.profile.id), {
         onSuccess: () => {
-            // Reset the form
-            form.reset();
-        },
+            // Redirect or show success message
+        }
     });
 };
 
-const conditionToAdd = ref('');
-const restrictionToAdd = ref('');
+// For condition selection
+const selectedConditionId = ref('');
+const selectedDietaryRestrictionId = ref('');
 </script>
 
 <template>
@@ -88,202 +124,205 @@ const restrictionToAdd = ref('');
                 <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
                     Edit Dietary Profile
                 </h2>
-                <div>
-                    <Link 
-                        :href="route('dashboard')" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
-                    >
-                        Back to Dashboard
-                    </Link>
-                </div>
+                <Link
+                    :href="route('dietary-profile.index')"
+                    class="inline-flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-700 border border-transparent rounded-md font-semibold text-xs text-gray-700 dark:text-gray-300 uppercase tracking-widest hover:bg-gray-300 dark:hover:bg-gray-600 focus:bg-gray-300 dark:focus:bg-gray-600 active:bg-gray-300 dark:active:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition ease-in-out duration-150"
+                >
+                    Back to Profiles
+                </Link>
             </div>
         </template>
-
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                <form @submit.prevent="submit">
-                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg mb-6 p-6">
+                <form @submit.prevent="submit" class="space-y-6">
+                    <!-- Basic Info -->
+                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg p-6">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
                             Profile Details
                         </h3>
-                        <div class="grid grid-cols-1 gap-y-6">
-                            <div>
-                                <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Profile Name</label>
+                        <div class="grid grid-cols-1 gap-6">
+                            <div class="col-span-1">
+                                <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                                 <input
                                     id="name"
                                     v-model="form.name"
                                     type="text"
-                                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                                    required
+                                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                                 />
-                                <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
                             </div>
-                            <div>
-                                <label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description (Optional)</label>
+                            <div class="col-span-1">
+                                <label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
                                 <textarea
                                     id="description"
                                     v-model="form.description"
                                     rows="3"
-                                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
+                                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                                 ></textarea>
-                                <p v-if="form.errors.description" class="mt-1 text-sm text-red-600">{{ form.errors.description }}</p>
                             </div>
                         </div>
                     </div>
-
-                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg mb-6 p-6">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                            Medical Conditions
-                        </h3>
+                    
+                    <!-- Medical Conditions Section -->
+                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                Medical Conditions
+                            </h3>
+                            <span class="text-sm text-gray-500 dark:text-gray-400">
+                                Add conditions that may affect your diet
+                            </span>
+                        </div>
                         
-                        <!-- Add Medical Condition -->
-                        <div class="mb-6">
-                            <label for="add-condition" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Medical Condition</label>
-                            <div class="flex space-x-3">
-                                <select
-                                    id="add-condition"
-                                    v-model="conditionToAdd"
-                                    class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                                >
-                                    <option value="">Select a condition</option>
-                                    <option v-for="condition in availableMedicalConditions" :key="condition.id" :value="condition.id">
-                                        {{ condition.name }}
-                                    </option>
-                                </select>
-                                <button
-                                    type="button"
-                                    @click="addMedicalCondition(conditionToAdd); conditionToAdd = '';"
-                                    :disabled="!conditionToAdd"
-                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Add
-                                </button>
+                        <!-- Add Medical Condition Form -->
+                        <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Medical Condition</label>
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <div class="flex-1">
+                                    <select 
+                                        v-model="selectedConditionId" 
+                                        class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                        <option value="">Select a condition</option>
+                                        <option v-for="condition in availableMedicalConditions" :key="condition.id" :value="condition.id">
+                                            {{ condition.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <button 
+                                        type="button" 
+                                        @click="addMedicalCondition"
+                                        :disabled="!selectedConditionId" 
+                                        class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         
                         <!-- Selected Medical Conditions -->
-                        <div v-if="form.medical_conditions.length > 0">
-                            <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Selected Conditions</h4>
-                            <div class="space-y-3">
-                                <div 
-                                    v-for="(condition, index) in form.medical_conditions" 
-                                    :key="index"
-                                    class="p-3 border border-gray-200 dark:border-gray-700 rounded-md"
-                                >
-                                    <div class="flex items-center space-x-3">
-                                        <div class="flex-1">
-                                            <div class="font-medium text-gray-900 dark:text-gray-100">
-                                                {{ props.medicalConditions.find(c => c.id === condition.id)?.name }}
-                                            </div>
-                                        </div>
-                                        <div class="w-32">
-                                            <select 
-                                                v-model="condition.severity"
-                                                class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
-                                            >
-                                                <option v-for="option in severityOptions" :key="option.value" :value="option.value">
-                                                    {{ option.label }}
-                                                </option>
-                                            </select>
-                                        </div>
-                                        <button 
-                                            type="button"
-                                            @click="removeMedicalCondition(index)"
-                                            class="text-red-500 hover:text-red-700 focus:outline-none"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
+                        <div v-if="form.medical_conditions.length > 0" class="space-y-3">
+                            <div 
+                                v-for="(condition, index) in form.medical_conditions" 
+                                :key="index"
+                                class="flex items-center space-x-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md"
+                            >
+                                <div class="flex-1">
+                                    <span class="font-medium text-gray-900 dark:text-gray-100">
+                                        {{ props.medicalConditions.find(c => c.id === condition.id)?.name }}
+                                    </span>
                                 </div>
+                                <div class="w-40">
+                                    <select 
+                                        v-model="form.medical_conditions[index].severity"
+                                        class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                        <option v-for="option in severityOptions" :key="option.value" :value="option.value">
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <button 
+                                    type="button"
+                                    @click="removeMedicalCondition(index)"
+                                    class="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
-                        <div v-else class="text-center py-4 text-gray-500 dark:text-gray-400">
+                        <div v-else class="p-6 text-center text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-md">
                             No medical conditions selected
                         </div>
                     </div>
-
-                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg mb-6 p-6">
-                        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                            Dietary Restrictions
-                        </h3>
-                        
-                        <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-500 text-blue-700 dark:text-blue-200">
-                            <p>The severity of dietary restrictions is automatically determined based on the severity of your medical conditions.</p>
+                    
+                    <!-- Dietary Restrictions Section -->
+                    <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                Dietary Restrictions
+                            </h3>
+                            <span class="text-sm text-gray-500 dark:text-gray-400">
+                                Add food restrictions, allergies or preferences
+                            </span>
                         </div>
                         
-                        <!-- Add Dietary Restriction -->
-                        <div class="mb-6">
-                            <label for="add-restriction" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Dietary Restriction</label>
-                            <div class="flex space-x-3">
-                                <select
-                                    id="add-restriction"
-                                    v-model="restrictionToAdd"
-                                    class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 sm:text-sm"
-                                >
-                                    <option value="">Select a restriction</option>
-                                    <option v-for="restriction in availableDietaryRestrictions" :key="restriction.id" :value="restriction.id">
-                                        {{ restriction.name }}
-                                    </option>
-                                </select>
-                                <button
-                                    type="button"
-                                    @click="addDietaryRestriction(restrictionToAdd); restrictionToAdd = '';"
-                                    :disabled="!restrictionToAdd"
-                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Add
-                                </button>
+                        <!-- Add Dietary Restriction Form -->
+                        <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-md">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Dietary Restriction</label>
+                            <div class="flex flex-col sm:flex-row gap-4">
+                                <div class="flex-1">
+                                    <select 
+                                        v-model="selectedDietaryRestrictionId" 
+                                        class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                        <option value="">Select a restriction</option>
+                                        <option v-for="restriction in availableDietaryRestrictions" :key="restriction.id" :value="restriction.id">
+                                            {{ restriction.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <button 
+                                        type="button" 
+                                        @click="addDietaryRestriction"
+                                        :disabled="!selectedDietaryRestrictionId" 
+                                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         
                         <!-- Selected Dietary Restrictions -->
-                        <div v-if="form.dietary_restrictions.length > 0">
-                            <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Selected Restrictions</h4>
-                            <div class="space-y-3">
-                                <div 
-                                    v-for="(restriction, index) in form.dietary_restrictions" 
-                                    :key="index"
-                                    class="p-3 border border-gray-200 dark:border-gray-700 rounded-md"
-                                >
-                                    <div class="flex items-center space-x-3 mb-2">
-                                        <div class="flex-1">
-                                            <div class="font-medium text-gray-900 dark:text-gray-100">
-                                                {{ props.commonDietaryRestrictions.find(r => r.id === restriction.id)?.name }}
-                                            </div>
-                                        </div>
-                                        <button 
-                                            type="button"
-                                            @click="removeDietaryRestriction(index)"
-                                            class="text-red-500 hover:text-red-700 focus:outline-none"
-                                        >
-                                            Remove
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label :for="`restriction-notes-${index}`" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Notes (Optional)</label>
-                                        <textarea 
-                                            :id="`restriction-notes-${index}`" 
-                                            v-model="restriction.notes" 
-                                            rows="2" 
-                                            class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm"
-                                        ></textarea>
-                                    </div>
+                        <div v-if="form.dietary_restrictions.length > 0" class="space-y-3">
+                            <div 
+                                v-for="(restriction, index) in form.dietary_restrictions" 
+                                :key="index"
+                                class="flex items-center space-x-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md"
+                            >
+                                <div class="flex-1">
+                                    <span class="font-medium text-gray-900 dark:text-gray-100">
+                                        {{ restriction.name }}
+                                    </span>
                                 </div>
+                                <div class="w-64">
+                                    <input 
+                                        v-model="form.dietary_restrictions[index].notes"
+                                        type="text"
+                                        placeholder="Add notes about this restriction"
+                                        class="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    />
+                                </div>
+                                <button 
+                                    type="button"
+                                    @click="removeDietaryRestriction(index)"
+                                    class="inline-flex items-center p-1.5 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
-                        <div v-else class="text-center py-4 text-gray-500 dark:text-gray-400">
+                        <div v-else class="p-6 text-center text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 rounded-md">
                             No dietary restrictions selected
                         </div>
                     </div>
-
+                    
                     <!-- Submit Button -->
-                    <div class="flex justify-end mt-6">
+                    <div class="flex justify-end">
                         <button
                             type="submit"
-                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                             :disabled="form.processing"
                         >
-                            Save Changes
+                            <span v-if="form.processing">Saving...</span>
+                            <span v-else>Save Changes</span>
                         </button>
                     </div>
                 </form>

@@ -19,13 +19,101 @@ class UserDietaryProfileController extends Controller
      */
     public function index()
     {
-        $profiles = auth()->user()->dietaryProfiles()
-            ->with(['dietaryRestrictions', 'medicalConditions'])
-            ->get();
-        
-        return Inertia::render('DietaryProfile/Index', [
-            'profiles' => $profiles,
-        ]);
+        try {
+            $profiles = auth()->user()->dietaryProfiles()
+                ->with(['dietaryRestrictions', 'medicalConditions'])
+                ->get();
+
+            Log::info('Raw profiles data', ['count' => count($profiles)]);
+
+            if (count($profiles) > 0) {
+                Log::info('First raw profile', ['id' => $profiles->first()->id]);
+            }
+
+            $transformed = $profiles->map(function ($profile) {
+                try {
+                    $medical_conditions = [];
+                    $dietary_restrictions = [];
+
+                    if ($profile->medicalConditions) {
+                        $medical_conditions = $profile->medicalConditions->map(function ($condition) {
+                            return [
+                                'id' => $condition->id,
+                                'name' => $condition->name,
+                                'pivot' => $condition->pivot ? [
+                                    'severity' => $condition->pivot->severity,
+                                ] : null,
+                            ];
+                        })->toArray();
+                    }
+
+                    if ($profile->dietaryRestrictions) {
+                        $dietary_restrictions = $profile->dietaryRestrictions->map(function ($restriction) {
+                            return [
+                                'id' => $restriction->id,
+                                'name' => $restriction->name,
+                                'pivot' => $restriction->pivot ? [
+                                    'severity' => $restriction->pivot->severity,
+                                ] : null,
+                            ];
+                        })->toArray();
+                    }
+
+                    // Transform to consistent format with dashboard
+                    return [
+                        'id' => $profile->id,
+                        'name' => $profile->name,
+                        'profile_name' => $profile->name, // For consistency
+                        'description' => $profile->description,
+                        'is_active' => $profile->is_active,
+                        'created_at' => $profile->created_at,
+                        'updated_at' => $profile->updated_at,
+                        'medical_conditions' => $medical_conditions,
+                        'dietary_restrictions' => $dietary_restrictions,
+                    ];
+                } catch (\Exception $e) {
+                    Log::error('Error transforming profile', [
+                        'profile_id' => $profile->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    
+                    // Return a minimal profile when error occurs
+                    return [
+                        'id' => $profile->id,
+                        'name' => $profile->name,
+                        'profile_name' => $profile->name,
+                        'description' => $profile->description,
+                        'is_active' => $profile->is_active,
+                        'created_at' => $profile->created_at,
+                        'updated_at' => $profile->updated_at,
+                        'medical_conditions' => [],
+                        'dietary_restrictions' => [],
+                        'error' => 'Error processing profile data'
+                    ];
+                }
+            });
+            
+            // Add debugging log
+            Log::info('Profiles data for index page', [
+                'count' => count($transformed),
+                'sample' => $transformed->first()
+            ]);
+            
+            return Inertia::render('DietaryProfile/Index', [
+                'profiles' => $transformed,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in index method', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return Inertia::render('DietaryProfile/Index', [
+                'profiles' => [],
+                'error' => 'Error retrieving profiles. Please try again later.'
+            ]);
+        }
     }
 
     /**
@@ -141,40 +229,127 @@ class UserDietaryProfileController extends Controller
         // Authorize the request
         $this->authorize('update', $userDietaryProfile);
         
+        // Debug the incoming request
+        Log::info('Updating dietary profile', [
+            'profile_id' => $userDietaryProfile->id,
+            'request_data' => $request->all()
+        ]);
+        
         // Check if this is just setting the profile as active
         if ($request->has('is_active') && count($request->all()) <= 2) {
             return $this->setActive($userDietaryProfile);
         }
         
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string|max:1000',
-            'medical_conditions' => 'array',
-            'medical_conditions.*.id' => 'required|exists:medical_conditions,id',
-            'medical_conditions.*.severity' => 'required|in:mild,moderate,severe',
-            'dietary_restrictions' => 'array',
-            'dietary_restrictions.*.id' => 'required|exists:dietary_restrictions,id',
-            'dietary_restrictions.*.notes' => 'nullable|string|max:1000',
-        ]);
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string|max:1000',
+                'medical_conditions' => 'array',
+                'medical_conditions.*.id' => 'required|exists:medical_conditions,id',
+                'medical_conditions.*.severity' => 'required|in:mild,moderate,severe',
+                'dietary_restrictions' => 'array',
+                'dietary_restrictions.*.id' => 'required|exists:dietary_restrictions,id',
+                'dietary_restrictions.*.notes' => 'nullable|string|max:1000',
+            ]);
+            
+            Log::info('Validated data for profile update', [
+                'profile_id' => $userDietaryProfile->id,
+                'name' => $validated['name'],
+                'medical_conditions' => isset($validated['medical_conditions']) ? $validated['medical_conditions'] : [],
+                'medical_conditions_count' => isset($validated['medical_conditions']) ? count($validated['medical_conditions']) : 0,
+                'dietary_restrictions_count' => isset($validated['dietary_restrictions']) ? count($validated['dietary_restrictions']) : 0
+            ]);
 
-        // Update profile
-        $userDietaryProfile->name = $validated['name'];
-        $userDietaryProfile->description = $validated['description'] ?? null;
-        $userDietaryProfile->save();
+            // Update profile
+            $userDietaryProfile->name = $validated['name'];
+            $userDietaryProfile->description = $validated['description'] ?? null;
+            $userDietaryProfile->save();
 
-        // Sync medical conditions with severity
-        $medicalConditionData = [];
-        foreach ($validated['medical_conditions'] ?? [] as $condition) {
-            $medicalConditionData[$condition['id']] = ['severity' => $condition['severity']];
+            // Enable query logging
+            \DB::enableQueryLog();
+            
+            // Sync medical conditions with severity
+            $medicalConditionData = [];
+            if (isset($validated['medical_conditions']) && is_array($validated['medical_conditions'])) {
+                foreach ($validated['medical_conditions'] as $condition) {
+                    if (isset($condition['id']) && isset($condition['severity'])) {
+                        $medicalConditionData[$condition['id']] = ['severity' => $condition['severity']];
+                    } else {
+                        Log::warning('Malformed medical condition data', [
+                            'condition' => $condition
+                        ]);
+                    }
+                }
+                
+                Log::info('Syncing medical conditions', [
+                    'profile_id' => $userDietaryProfile->id,
+                    'medical_condition_data' => $medicalConditionData,
+                    'condition_count' => count($medicalConditionData)
+                ]);
+                
+                try {
+                    $syncResult = $userDietaryProfile->medicalConditions()->sync($medicalConditionData);
+                    
+                    // Log the queries
+                    Log::info('SQL Queries for medical conditions sync', [
+                        'queries' => \DB::getQueryLog()
+                    ]);
+                    
+                    Log::info('Medical conditions sync result', [
+                        'attached' => $syncResult['attached'],
+                        'detached' => $syncResult['detached'],
+                        'updated' => $syncResult['updated']
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Error syncing medical conditions', [
+                        'error' => $e->getMessage(),
+                        'medical_condition_data' => $medicalConditionData,
+                        'queries' => \DB::getQueryLog()
+                    ]);
+                    throw $e;
+                }
+            } else {
+                Log::warning('No medical conditions provided or invalid format', [
+                    'medical_conditions' => $validated['medical_conditions'] ?? null
+                ]);
+                // Clear all existing medical conditions if none provided
+                $userDietaryProfile->medicalConditions()->sync([]);
+                
+                // Log the queries
+                Log::info('SQL Queries for clearing medical conditions', [
+                    'queries' => \DB::getQueryLog()
+                ]);
+            }
+            
+            // Disable query logging
+            \DB::disableQueryLog();
+
+            // Determine and sync dietary restrictions with calculated severity
+            $this->syncDietaryRestrictionsWithCalculatedSeverity($userDietaryProfile, $validated['dietary_restrictions'] ?? []);
+
+            // Reload the profile with relationships to verify data
+            $userDietaryProfile->load(['medicalConditions', 'dietaryRestrictions']);
+            Log::info('Profile after update', [
+                'profile_id' => $userDietaryProfile->id,
+                'medical_conditions_count' => $userDietaryProfile->medicalConditions->count(),
+                'dietary_restrictions_count' => $userDietaryProfile->dietaryRestrictions->count()
+            ]);
+
+            // Return to the dashboard instead of the dietary-profile index
+            return redirect()->route('dashboard')
+                ->with('success', 'Dietary profile updated successfully.');
+                
+        } catch (\Exception $e) {
+            Log::error('Error updating dietary profile', [
+                'profile_id' => $userDietaryProfile->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to update dietary profile: ' . $e->getMessage()])
+                ->withInput();
         }
-        $userDietaryProfile->medicalConditions()->sync($medicalConditionData);
-
-        // Determine and sync dietary restrictions with calculated severity
-        $this->syncDietaryRestrictionsWithCalculatedSeverity($userDietaryProfile, $validated['dietary_restrictions'] ?? []);
-
-        // Return to the dashboard instead of the dietary-profile index
-        return redirect()->route('dashboard')
-            ->with('success', 'Dietary profile updated successfully.');
     }
 
     /**
