@@ -226,7 +226,7 @@ const formatDate = (dateString) => {
                             <span>View All Profiles ({{ props.totalProfilesCount }})</span>
                         </Link>
                     </div>
-                    <div v-else class="text-center py-6">
+                    <div v-else-if="!props.recentProfiles || props.recentProfiles.length === 0" class="text-center py-6">
                         <p class="text-gray-500 dark:text-gray-400 mb-4">
                             You don't have any dietary profiles yet.
                         </p>
