@@ -7,6 +7,7 @@ const props = defineProps({
     activeProfile: Object,
     stats: Object,
     recentProfiles: Array,
+    totalProfilesCount: Number,
     commonRestrictions: Array,
     recommendedRecipes: Array
 });
@@ -183,7 +184,7 @@ const formatDate = (dateString) => {
                 <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            Your Dietary Profiles
+                            Your Dietary Profiles ({{ props.totalProfilesCount }})
                         </h3>
                         <Link 
                             :href="route('dietary-profile.create')" 
@@ -192,7 +193,7 @@ const formatDate = (dateString) => {
                             <span>New Profile</span>
                         </Link>
                     </div>
-                    <div v-if="props.recentProfiles && props.recentProfiles.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div v-if="props.recentProfiles && props.recentProfiles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div v-for="profile in props.recentProfiles" :key="profile.id" 
                             class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
                             <div class="flex items-center justify-between">
@@ -216,6 +217,14 @@ const formatDate = (dateString) => {
                                 </Link>
                             </div>
                         </div>
+                    </div>
+                    <div v-if="props.totalProfilesCount > props.recentProfiles.length" class="mt-4 text-center">
+                        <Link 
+                            :href="route('dietary-profile.index')" 
+                            class="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                        >
+                            <span>View All Profiles ({{ props.totalProfilesCount }})</span>
+                        </Link>
                     </div>
                     <div v-else class="text-center py-6">
                         <p class="text-gray-500 dark:text-gray-400 mb-4">

@@ -71,8 +71,11 @@ class DashboardController extends Controller
         $recentProfiles = $user->dietaryProfiles()
             ->select('id', 'name as profile_name', 'description', 'is_active', 'created_at', 'updated_at')
             ->orderBy('updated_at', 'desc')
-            ->take(3)
+            ->take(6)
             ->get();
+        
+        // Get total count of dietary profiles
+        $totalProfilesCount = $user->dietaryProfiles()->count();
         
         // Get common dietary restrictions (for recommendations)
         $commonRestrictions = DietaryRestriction::withCount('userProfiles')
@@ -84,6 +87,7 @@ class DashboardController extends Controller
             'activeProfile' => $formattedActiveProfile,
             'stats' => $stats,
             'recentProfiles' => $recentProfiles,
+            'totalProfilesCount' => $totalProfilesCount,
             'commonRestrictions' => $commonRestrictions,
             'recommendedRecipes' => [] // Placeholder for future recipe recommendation
         ]);
