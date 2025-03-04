@@ -8,6 +8,7 @@ import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
 import Checkbox from '@/Components/Checkbox.vue';
+import axios from 'axios';
 
 // Props and initial data
 const props = defineProps({
@@ -50,20 +51,34 @@ const filteredMedicalConditions = computed(() => {
 
 // Add a custom medical condition to the list
 const addCustomCondition = () => {
-    // Check if the condition is already in our list
-    if (!props.medicalConditions.some(c => c.name === customForm.name)) {
-        // Add it to our local list and select it
-        props.medicalConditions.push({
-            id: props.medicalConditions.length + 1,
-            name: customForm.name,
-            description: customForm.description
-        });
-        // Auto-select the new condition
-        toggleMedicalCondition(props.medicalConditions[props.medicalConditions.length - 1]);
-        customFormMessage.value = 'Custom condition added successfully!';
-        customForm.name = '';
-        customForm.description = '';
-    }
+    axios.post('/medical-conditions', {
+        name: customForm.name,
+        description: customForm.description
+    }).then(response => {
+        if (response.data.status === 'duplicate') {
+            // Show error message about duplicate condition
+            customFormMessage.value = `A similar condition already exists: "${response.data.condition.name}"`;
+        } else {
+            // Add the custom condition to the list
+            const newCondition = response.data.condition;
+            
+            // Add it to our local list and select it
+            props.medicalConditions.push(newCondition);
+            
+            // Auto-select the new condition
+            toggleMedicalCondition(newCondition);
+            
+            customFormMessage.value = 'Custom condition added successfully!';
+            customForm.name = '';
+            customForm.description = '';
+        }
+    }).catch(error => {
+        if (error.response && error.response.data.errors) {
+            customFormMessage.value = Object.values(error.response.data.errors).flat().join(' ');
+        } else {
+            customFormMessage.value = 'An error occurred while creating the custom condition';
+        }
+    });
 };
 
 // Toggle a medical condition selection
@@ -429,46 +444,6 @@ onMounted(() => {
                             />
                         </div>
 
-                        <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <h4 class="text-red-700 font-bold mb-2">Add Custom Medical Condition</h4>
-                            
-                            <form @submit.prevent="addCustomCondition">
-                              <div class="mb-4">
-                                <InputLabel for="custom-name" value="Condition Name" />
-                                <TextInput
-                                  id="custom-name"
-                                  v-model="customForm.name"
-                                  type="text"
-                                  class="mt-1 block w-full"
-                                  required
-                                />
-                              </div>
-                              
-                              <div class="mb-4">
-                                <InputLabel for="custom-description" value="Description" />
-                                <textarea
-                                  id="custom-description"
-                                  v-model="customForm.description"
-                                  class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm"
-                                  required
-                                ></textarea>
-                                <p class="mt-1 text-sm text-gray-500">
-                                  Please provide details about this condition and how it affects dietary needs.
-                                </p>
-                              </div>
-                              
-                              <div class="flex items-center justify-end mt-4">
-                                <PrimaryButton class="ml-4" type="submit">
-                                  Add Custom Condition
-                                </PrimaryButton>
-                              </div>
-                            </form>
-                            
-                            <div v-if="customFormMessage" class="mt-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded">
-                              {{ customFormMessage }}
-                            </div>
-                        </div>
-
                         <div class="space-y-4 max-h-96 overflow-y-auto px-1">
                             <div 
                                 v-for="condition in filteredMedicalConditions" 
@@ -533,6 +508,51 @@ onMounted(() => {
                             <p class="text-gray-500 dark:text-gray-400">
                                 No medical conditions found matching your search.
                             </p>
+                        </div>
+
+                        <div class="mt-10 pt-6 border-t border-gray-200 dark:border-gray-700">
+                            <div class="flex items-center mb-4">
+                                <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                                    Can't find your condition?
+                                </h3>
+                            </div>
+                            <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                                <form @submit.prevent="addCustomCondition">
+                                  <div class="mb-4">
+                                    <InputLabel for="custom-name" value="Condition Name" />
+                                    <TextInput
+                                      id="custom-name"
+                                      v-model="customForm.name"
+                                      type="text"
+                                      class="mt-1 block w-full"
+                                      required
+                                    />
+                                  </div>
+                                  
+                                  <div class="mb-4">
+                                    <InputLabel for="custom-description" value="Description" />
+                                    <textarea
+                                      id="custom-description"
+                                      v-model="customForm.description"
+                                      class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 focus:ring-indigo-500 focus:ring-offset-2 rounded-md shadow-sm"
+                                      required
+                                    ></textarea>
+                                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                      Please provide details about this condition and how it affects your dietary needs.
+                                    </p>
+                                  </div>
+                                  
+                                  <div class="flex items-center justify-end mt-4">
+                                    <PrimaryButton class="ml-4" type="submit">
+                                      Add Custom Condition
+                                    </PrimaryButton>
+                                  </div>
+                                </form>
+                                
+                                <div v-if="customFormMessage" class="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300 rounded">
+                                  {{ customFormMessage }}
+                                </div>
+                            </div>
                         </div>
 
                         <div class="mt-8 flex justify-between">
@@ -603,7 +623,10 @@ onMounted(() => {
                                                     >
                                                 </div>
                                                 <div class="ml-3 text-sm">
-                                                    <label :for="`restriction-${restriction.id}`" class="font-medium text-gray-700 dark:text-gray-300">
+                                                    <label 
+                                                        :for="`restriction-${restriction.id}`" 
+                                                        class="font-medium text-gray-700 dark:text-gray-300"
+                                                    >
                                                         {{ restriction.name }}
                                                     </label>
                                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
