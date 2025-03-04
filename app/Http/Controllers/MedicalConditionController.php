@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\MedicalCondition;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class MedicalConditionController extends Controller
 {
@@ -13,28 +15,77 @@ class MedicalConditionController extends Controller
     public function index(Request $request)
     {
         $query = $request->input('query');
+        $userId = Auth::id();
         
-        $conditions = MedicalCondition::when($query, function ($q) use ($query) {
+        $conditions = MedicalCondition::availableTo($userId)
+            ->when($query, function ($q) use ($query) {
                 return $q->where('name', 'like', "%{$query}%");
             })
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(function ($condition) {
+                // Add a flag to indicate if this is a custom condition
+                return array_merge($condition->toArray(), [
+                    'is_custom' => !is_null($condition->user_id),
+                ]);
+            });
             
         return response()->json($conditions);
+    }
+
+    /**
+     * Store a newly created medical condition.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'required|string',
+        ]);
+        
+        // Check if a similar condition already exists (fuzzy matching)
+        $similarCondition = MedicalCondition::availableTo(Auth::id())
+            ->where('name', 'like', '%' . $validated['name'] . '%')
+            ->first();
+            
+        if ($similarCondition) {
+            return response()->json([
+                'message' => 'A similar condition already exists',
+                'condition' => array_merge($similarCondition->toArray(), [
+                    'is_custom' => !is_null($similarCondition->user_id),
+                ]),
+                'status' => 'duplicate'
+            ]);
+        }
+        
+        // Create new custom condition
+        $condition = new MedicalCondition();
+        $condition->name = $validated['name'];
+        $condition->description = $validated['description'];
+        $condition->user_id = Auth::id();
+        $condition->is_verified = false;
+        $condition->save();
+        
+        // Log the creation of a custom condition
+        Log::info('Custom medical condition created', [
+            'condition_id' => $condition->id,
+            'condition_name' => $condition->name,
+            'user_id' => Auth::id()
+        ]);
+        
+        return response()->json([
+            'message' => 'Medical condition created successfully',
+            'condition' => array_merge($condition->toArray(), [
+                'is_custom' => true,
+            ]),
+            'status' => 'created'
+        ]);
     }
 
     /**
      * Show the form for creating a new resource.
      */
     public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
     {
         //
     }
@@ -72,12 +123,31 @@ class MedicalConditionController extends Controller
     }
     
     /**
-     * Get dietary restrictions associated with a medical condition.
+     * Get related dietary restrictions for a medical condition.
      */
     public function restrictions(MedicalCondition $medicalCondition)
     {
-        $restrictions = $medicalCondition->dietaryRestrictions()->get();
+        $restrictions = $medicalCondition->dietaryRestrictions;
         
-        return response()->json($restrictions);
+        // If this is a custom condition or has no specific restrictions,
+        // we could use AI to suggest restrictions based on the name/description
+        if ($restrictions->isEmpty() && (!is_null($medicalCondition->user_id) || $medicalCondition->is_verified === false)) {
+            // This would be where an AI API call would happen
+            // For now, we'll return empty, but in a full implementation
+            // you would add suggested restrictions here
+            
+            // Placeholder for AI-generated suggestions
+            $aiSuggestedRestrictions = [];
+            
+            return response()->json([
+                'restrictions' => $aiSuggestedRestrictions,
+                'is_ai_suggested' => true
+            ]);
+        }
+        
+        return response()->json([
+            'restrictions' => $restrictions,
+            'is_ai_suggested' => false
+        ]);
     }
 }

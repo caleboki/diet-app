@@ -93,4 +93,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(RecipeModification::class);
     }
+
+    /**
+     * Get the custom medical conditions created by this user.
+     */
+    public function customMedicalConditions()
+    {
+        return $this->hasMany(MedicalCondition::class);
+    }
 }

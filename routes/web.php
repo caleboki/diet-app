@@ -38,7 +38,13 @@ Route::middleware([
 
     // API Routes for Medical Conditions and Dietary Restrictions
     Route::get('/medical-conditions', [MedicalConditionController::class, 'index'])->name('medical-conditions.index');
+    Route::post('/medical-conditions', [MedicalConditionController::class, 'store'])->name('medical-conditions.store');
     Route::get('/dietary-restrictions', [DietaryRestrictionController::class, 'index'])->name('dietary-restrictions.index');
     Route::get('/medical-conditions/{medicalCondition}/restrictions', [MedicalConditionController::class, 'restrictions'])
         ->name('medical-conditions.restrictions');
+        
+    // Test route for custom medical condition form
+    Route::get('/test-medical-form', function() {
+        return Inertia::render('TestCustomMedicalForm');
+    })->name('test-medical-form');
 });

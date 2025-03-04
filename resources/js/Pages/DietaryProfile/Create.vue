@@ -30,6 +30,11 @@ const errors = ref({});
 const searchQuery = ref('');
 const processing = ref(false);
 const showTooltip = ref(null);
+const customForm = reactive({
+    name: '',
+    description: ''
+});
+const customFormMessage = ref('');
 
 // Filtered medical conditions based on search
 const filteredMedicalConditions = computed(() => {
@@ -42,6 +47,24 @@ const filteredMedicalConditions = computed(() => {
         condition.name.toLowerCase().includes(query)
     );
 });
+
+// Add a custom medical condition to the list
+const addCustomCondition = () => {
+    // Check if the condition is already in our list
+    if (!props.medicalConditions.some(c => c.name === customForm.name)) {
+        // Add it to our local list and select it
+        props.medicalConditions.push({
+            id: props.medicalConditions.length + 1,
+            name: customForm.name,
+            description: customForm.description
+        });
+        // Auto-select the new condition
+        toggleMedicalCondition(props.medicalConditions[props.medicalConditions.length - 1]);
+        customFormMessage.value = 'Custom condition added successfully!';
+        customForm.name = '';
+        customForm.description = '';
+    }
+};
 
 // Toggle a medical condition selection
 const toggleMedicalCondition = (condition) => {
@@ -406,6 +429,46 @@ onMounted(() => {
                             />
                         </div>
 
+                        <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                            <h4 class="text-red-700 font-bold mb-2">Add Custom Medical Condition</h4>
+                            
+                            <form @submit.prevent="addCustomCondition">
+                              <div class="mb-4">
+                                <InputLabel for="custom-name" value="Condition Name" />
+                                <TextInput
+                                  id="custom-name"
+                                  v-model="customForm.name"
+                                  type="text"
+                                  class="mt-1 block w-full"
+                                  required
+                                />
+                              </div>
+                              
+                              <div class="mb-4">
+                                <InputLabel for="custom-description" value="Description" />
+                                <textarea
+                                  id="custom-description"
+                                  v-model="customForm.description"
+                                  class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm"
+                                  required
+                                ></textarea>
+                                <p class="mt-1 text-sm text-gray-500">
+                                  Please provide details about this condition and how it affects dietary needs.
+                                </p>
+                              </div>
+                              
+                              <div class="flex items-center justify-end mt-4">
+                                <PrimaryButton class="ml-4" type="submit">
+                                  Add Custom Condition
+                                </PrimaryButton>
+                              </div>
+                            </form>
+                            
+                            <div v-if="customFormMessage" class="mt-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded">
+                              {{ customFormMessage }}
+                            </div>
+                        </div>
+
                         <div class="space-y-4 max-h-96 overflow-y-auto px-1">
                             <div 
                                 v-for="condition in filteredMedicalConditions" 
@@ -600,7 +663,6 @@ onMounted(() => {
                                     class="mt-1 block w-full"
                                     placeholder="e.g., My Daily Diet, Diabetes Management"
                                 />
-                                <InputError :message="errors.name" class="mt-2" />
                             </div>
                             <div class="flex items-center">
                                 <Checkbox
