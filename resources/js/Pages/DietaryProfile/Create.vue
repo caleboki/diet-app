@@ -65,8 +65,17 @@ const addCustomCondition = () => {
             // Add it to our local list and select it
             props.medicalConditions.push(newCondition);
             
-            // Auto-select the new condition
-            toggleMedicalCondition(newCondition);
+            // Auto-select the new condition with default severity
+            const updatedConditions = [...form.medical_conditions];
+            updatedConditions.push({
+                id: newCondition.id,
+                name: newCondition.name,
+                severity: 'moderate' // Default severity
+            });
+            form.medical_conditions = updatedConditions;
+            
+            // Update recommended restrictions based on the new condition
+            updateRecommendedRestrictions();
             
             customFormMessage.value = 'Custom condition added successfully!';
             customForm.name = '';
