@@ -145,7 +145,7 @@ const formatDate = (dateString) => {
                                             v-if="condition.is_custom" 
                                             class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
                                         >
-                                            Self-reported
+                                            Custom
                                         </span>
                                         <span class="px-2 py-0.5 rounded text-xs font-medium" :class="getSeverityColor(condition.pivot.severity)">
                                             {{ condition.pivot.severity }}
