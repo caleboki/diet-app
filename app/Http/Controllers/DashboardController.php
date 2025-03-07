@@ -31,6 +31,13 @@ class DashboardController extends Controller
         // Format the active profile data for the frontend
         $formattedActiveProfile = null;
         if ($activeProfile) {
+            // Map medical conditions with the is_custom flag
+            $medicalConditions = $activeProfile->medicalConditions->map(function($condition) {
+                $data = $condition->toArray();
+                $data['is_custom'] = !is_null($condition->user_id);
+                return $data;
+            });
+
             $formattedActiveProfile = [
                 'id' => $activeProfile->id,
                 'profile_name' => $activeProfile->name,
@@ -38,7 +45,7 @@ class DashboardController extends Controller
                 'is_active' => $activeProfile->is_active,
                 'created_at' => $activeProfile->created_at,
                 'updated_at' => $activeProfile->updated_at,
-                'medical_conditions' => $activeProfile->medicalConditions,
+                'medical_conditions' => $medicalConditions,
                 'dietary_restrictions' => $activeProfile->dietaryRestrictions,
             ];
         }

@@ -140,9 +140,17 @@ const formatDate = (dateString) => {
                                 class="p-3 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <div class="flex justify-between">
                                     <span class="font-medium text-gray-800 dark:text-gray-200">{{ condition.name }}</span>
-                                    <span class="px-2 py-0.5 rounded text-xs font-medium" :class="getSeverityColor(condition.pivot.severity)">
-                                        {{ condition.pivot.severity }}
-                                    </span>
+                                    <div class="flex items-center space-x-2">
+                                        <span 
+                                            v-if="condition.is_custom" 
+                                            class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                        >
+                                            Self-reported
+                                        </span>
+                                        <span class="px-2 py-0.5 rounded text-xs font-medium" :class="getSeverityColor(condition.pivot.severity)">
+                                            {{ condition.pivot.severity }}
+                                        </span>
+                                    </div>
                                 </div>
                                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                                     {{ condition.description }}
