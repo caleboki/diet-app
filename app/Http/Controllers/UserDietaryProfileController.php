@@ -40,6 +40,8 @@ class UserDietaryProfileController extends Controller
                             return [
                                 'id' => $condition->id,
                                 'name' => $condition->name,
+                                'description' => $condition->description,
+                                'is_custom' => !is_null($condition->user_id),
                                 'pivot' => $condition->pivot ? [
                                     'severity' => $condition->pivot->severity,
                                 ] : null,
@@ -201,8 +203,16 @@ class UserDietaryProfileController extends Controller
         
         $userDietaryProfile->load(['dietaryRestrictions', 'medicalConditions', 'user']);
         
+        // Transform medical conditions to include is_custom flag
+        $transformedProfile = $userDietaryProfile->toArray();
+        $transformedProfile['medical_conditions'] = $userDietaryProfile->medicalConditions->map(function($condition) {
+            $data = $condition->toArray();
+            $data['is_custom'] = !is_null($condition->user_id);
+            return $data;
+        });
+        
         return Inertia::render('DietaryProfile/Show', [
-            'profile' => $userDietaryProfile,
+            'profile' => $transformedProfile,
         ]);
     }
 

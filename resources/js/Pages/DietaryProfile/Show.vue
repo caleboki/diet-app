@@ -92,9 +92,17 @@ const formatDate = (dateString) => {
                                             {{ condition.description }}
                                         </p>
                                     </div>
-                                    <span :class="[getSeverityColor(condition.pivot.severity), 'px-2 py-1 rounded-md text-xs font-medium capitalize']">
-                                        {{ condition.pivot.severity }}
-                                    </span>
+                                    <div class="flex items-center space-x-2">
+                                        <span 
+                                            v-if="condition.is_custom" 
+                                            class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                        >
+                                            Custom
+                                        </span>
+                                        <span :class="[getSeverityColor(condition.pivot.severity), 'px-2 py-1 rounded-md text-xs font-medium capitalize']">
+                                            {{ condition.pivot.severity }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
