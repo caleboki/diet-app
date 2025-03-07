@@ -121,7 +121,14 @@ class UserDietaryProfileController extends Controller
      */
     public function create()
     {
-        $medicalConditions = MedicalCondition::orderBy('name')->get();
+        $medicalConditions = MedicalCondition::orderBy('name')
+            ->get()
+            ->map(function ($condition) {
+                // Add a flag to indicate if this is a custom condition
+                return array_merge($condition->toArray(), [
+                    'is_custom' => !is_null($condition->user_id),
+                ]);
+            });
         $commonDietaryRestrictions = DietaryRestriction::orderBy('name')->get();
         
         // Define the steps for the multi-step form

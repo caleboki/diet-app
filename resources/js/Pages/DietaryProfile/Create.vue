@@ -62,6 +62,9 @@ const addCustomCondition = () => {
             // Add the custom condition to the list
             const newCondition = response.data.condition;
             
+            // Add the custom flag
+            newCondition.is_custom = true;
+            
             // Add it to our local list and select it
             props.medicalConditions.push(newCondition);
             
@@ -471,6 +474,12 @@ onMounted(() => {
                                     >
                                         {{ condition.name }}
                                     </label>
+                                    <span 
+                                        v-if="condition.is_custom" 
+                                        class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                    >
+                                        Self-reported
+                                    </span>
                                 </div>
                                 <p 
                                     class="text-sm ml-7 text-gray-500"
