@@ -209,9 +209,17 @@ const selectedDietaryRestrictionId = ref('');
                                 class="flex items-center space-x-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md"
                             >
                                 <div class="flex-1">
-                                    <span class="font-medium text-gray-900 dark:text-gray-100">
-                                        {{ props.medicalConditions.find(c => c.id === condition.id)?.name }}
-                                    </span>
+                                    <div class="flex items-center">
+                                        <span class="font-medium text-gray-900 dark:text-gray-100">
+                                            {{ props.medicalConditions.find(c => c.id === condition.id)?.name }}
+                                        </span>
+                                        <span 
+                                            v-if="props.medicalConditions.find(c => c.id === condition.id)?.is_custom"
+                                            class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                        >
+                                            Custom
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="w-40">
                                     <select 

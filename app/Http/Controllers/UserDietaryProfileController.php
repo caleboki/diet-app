@@ -224,11 +224,25 @@ class UserDietaryProfileController extends Controller
         $this->authorize('update', $userDietaryProfile);
         
         $userDietaryProfile->load(['dietaryRestrictions', 'medicalConditions']);
-        $medicalConditions = MedicalCondition::all();
+        
+        // Transform profile data to include the is_custom flag
+        $transformedProfile = $userDietaryProfile->toArray();
+        $transformedProfile['medical_conditions'] = $userDietaryProfile->medicalConditions->map(function($condition) {
+            $data = $condition->toArray();
+            $data['is_custom'] = !is_null($condition->user_id);
+            return $data;
+        });
+        
+        $medicalConditions = MedicalCondition::all()->map(function($condition) {
+            $data = $condition->toArray();
+            $data['is_custom'] = !is_null($condition->user_id);
+            return $data;
+        });
+        
         $commonDietaryRestrictions = DietaryRestriction::where('is_common_allergen', true)->get();
         
         return Inertia::render('DietaryProfile/Edit', [
-            'profile' => $userDietaryProfile,
+            'profile' => $transformedProfile,
             'medicalConditions' => $medicalConditions,
             'commonDietaryRestrictions' => $commonDietaryRestrictions,
         ]);
