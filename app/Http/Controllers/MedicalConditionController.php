@@ -150,4 +150,47 @@ class MedicalConditionController extends Controller
             'is_ai_suggested' => false
         ]);
     }
+
+    /**
+     * Get recommended dietary restrictions for selected medical conditions.
+     */
+    public function getRecommendedRestrictions(Request $request)
+    {
+        $request->validate([
+            'condition_ids' => 'required|array',
+            'condition_ids.*' => 'required|integer|exists:medical_conditions,id',
+        ]);
+
+        $conditionIds = $request->input('condition_ids');
+        $conditions = MedicalCondition::with('dietaryRestrictions')->findMany($conditionIds);
+        
+        $recommendations = [];
+        
+        foreach ($conditions as $condition) {
+            foreach ($condition->dietaryRestrictions as $restriction) {
+                // Check if we already have this restriction in our recommendations
+                $existingIndex = array_search($restriction->id, array_column($recommendations, 'id'));
+                
+                if ($existingIndex === false) {
+                    // Add new recommendation
+                    $recommendations[] = [
+                        'id' => $restriction->id,
+                        'name' => $restriction->name,
+                        'description' => $restriction->description,
+                        'is_common_allergen' => $restriction->is_common_allergen,
+                        'recommended_severity' => 'moderate', // Default severity
+                        'source_condition' => [
+                            'id' => $condition->id,
+                            'name' => $condition->name
+                        ]
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'recommendations' => $recommendations
+        ]);
+    }
 }

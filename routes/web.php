@@ -39,6 +39,8 @@ Route::middleware([
     // API Routes for Medical Conditions and Dietary Restrictions
     Route::get('/medical-conditions', [MedicalConditionController::class, 'index'])->name('medical-conditions.index');
     Route::post('/medical-conditions', [MedicalConditionController::class, 'store'])->name('medical-conditions.store');
+    Route::post('/medical-conditions/recommended-restrictions', [MedicalConditionController::class, 'getRecommendedRestrictions'])
+        ->name('medical-conditions.recommended-restrictions');
     Route::get('/dietary-restrictions', [DietaryRestrictionController::class, 'index'])->name('dietary-restrictions.index');
     Route::get('/medical-conditions/{medicalCondition}/restrictions', [MedicalConditionController::class, 'restrictions'])
         ->name('medical-conditions.restrictions');

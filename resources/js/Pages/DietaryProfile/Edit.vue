@@ -2,6 +2,7 @@
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, onMounted } from 'vue';
+import axios from 'axios';
 
 const props = defineProps({
     profile: Object,
@@ -61,6 +62,9 @@ const addMedicalCondition = () => {
         
         // Reset the selection
         selectedConditionId.value = '';
+        
+        // Update recommended dietary restrictions
+        updateRecommendedRestrictions();
     }
 };
 
@@ -70,6 +74,67 @@ const removeMedicalCondition = (index) => {
     const updatedConditions = [...form.medical_conditions];
     updatedConditions.splice(index, 1);
     form.medical_conditions = updatedConditions;
+    
+    // Update recommended restrictions when removing a condition
+    updateRecommendedRestrictions();
+};
+
+// Get recommended dietary restrictions based on selected medical conditions
+const updateRecommendedRestrictions = () => {
+    // If no medical conditions are selected, don't do anything
+    if (form.medical_conditions.length === 0) {
+        return;
+    }
+    
+    // Get a copy of all user manually selected restrictions to preserve them
+    const userManualSelections = [...form.dietary_restrictions];
+    
+    // Get condition IDs from selected conditions
+    const conditionIds = form.medical_conditions.map(condition => condition.id);
+    
+    // Call the backend API to get recommended restrictions
+    axios.post(route('medical-conditions.recommended-restrictions'), {
+        condition_ids: conditionIds
+    }).then(response => {
+        if (response.data.success) {
+            // Create a new array to ensure reactivity
+            let updatedRestrictions = [];
+            
+            // Process recommendations from the API
+            response.data.recommendations.forEach(recommendation => {
+                // Check if this was previously selected (to preserve notes & user selections)
+                const previousSelection = userManualSelections.find(r => r.id === recommendation.id);
+                
+                // If it was previously selected OR it's a new recommendation, include it
+                if (previousSelection || !userManualSelections.some(r => r.id === recommendation.id)) {
+                    // Add to updatedRestrictions, preserving notes if existed
+                    updatedRestrictions.push({
+                        id: recommendation.id,
+                        name: recommendation.name,
+                        severity: previousSelection ? previousSelection.severity : recommendation.recommended_severity,
+                        notes: previousSelection ? previousSelection.notes : '',
+                        source_condition: recommendation.source_condition,
+                        is_recommended: true
+                    });
+                }
+            });
+            
+            // Add any manually selected restrictions that weren't in the recommendations
+            userManualSelections.forEach(restriction => {
+                if (!updatedRestrictions.some(r => r.id === restriction.id)) {
+                    updatedRestrictions.push({
+                        ...restriction,
+                        is_recommended: false
+                    });
+                }
+            });
+            
+            // Set the form data with the new array to ensure reactivity
+            form.dietary_restrictions = updatedRestrictions;
+        }
+    }).catch(error => {
+        console.error('Error fetching recommended restrictions:', error);
+    });
 };
 
 // Function to add a dietary restriction
@@ -294,9 +359,24 @@ const selectedDietaryRestrictionId = ref('');
                                 class="flex items-center space-x-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md"
                             >
                                 <div class="flex-1">
-                                    <span class="font-medium text-gray-900 dark:text-gray-100">
-                                        {{ restriction.name }}
-                                    </span>
+                                    <div class="flex items-center">
+                                        <span class="font-medium text-gray-900 dark:text-gray-100">
+                                            {{ restriction.name }}
+                                        </span>
+                                        <span 
+                                            v-if="restriction.is_recommended" 
+                                            class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+                                            title="Recommended based on your selected medical conditions"
+                                        >
+                                            Recommended
+                                        </span>
+                                        <span 
+                                            v-if="restriction.source_condition"
+                                            class="ml-2 text-xs text-gray-500 dark:text-gray-400"
+                                        >
+                                            (from {{ restriction.source_condition.name }})
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="w-64">
                                     <input 

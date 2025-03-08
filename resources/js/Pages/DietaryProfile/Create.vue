@@ -122,55 +122,60 @@ const toggleMedicalCondition = (condition) => {
 
 // Get recommended dietary restrictions based on selected medical conditions
 const updateRecommendedRestrictions = () => {
+    // If no medical conditions are selected, don't do anything
+    if (form.medical_conditions.length === 0) {
+        return;
+    }
+    
     // Get a copy of all user manually selected restrictions to preserve them
     const userManualSelections = [...form.dietary_restrictions];
     
-    // Create a new array to ensure reactivity
-    let updatedRestrictions = [];
+    // Get condition IDs from selected conditions
+    const conditionIds = form.medical_conditions.map(condition => condition.id);
     
-    // Map of medical condition IDs to recommended dietary restriction IDs
-    const conditionToRestrictionMap = {
-        // Example: Condition ID 1 recommends restrictions 1, 2, 3
-        1: [1, 2, 3],
-        2: [3, 4],
-        3: [2, 5, 6],
-        // Add more mappings as needed
-    };
-    
-    // Track recommendations for this selection of conditions
-    const recommendedRestrictionIds = new Set();
-    
-    // Add all recommended restrictions based on selected conditions
-    form.medical_conditions.forEach(condition => {
-        if (condition.id in conditionToRestrictionMap) {
-            conditionToRestrictionMap[condition.id].forEach(restrictionId => {
-                recommendedRestrictionIds.add(restrictionId);
-            });
-        }
-    });
-    
-    // Add all recommended restrictions to the form
-    props.commonDietaryRestrictions.forEach(restriction => {
-        // If restriction is recommended OR it was manually selected by the user, include it
-        if (recommendedRestrictionIds.has(restriction.id) || 
-            userManualSelections.some(r => r.id === restriction.id)) {
+    // Call the backend API to get recommended restrictions
+    axios.post(route('medical-conditions.recommended-restrictions'), {
+        condition_ids: conditionIds
+    }).then(response => {
+        if (response.data.success) {
+            // Create a new array to ensure reactivity
+            let updatedRestrictions = [];
             
-            // Check if this was previously selected (to preserve notes)
-            const previousSelection = userManualSelections.find(r => r.id === restriction.id);
-            
-            // Add to updatedRestrictions, preserving notes if existed
-            const severity = deriveSeverity(restriction.id);
-            updatedRestrictions.push({
-                id: restriction.id,
-                name: restriction.name,
-                severity: previousSelection ? previousSelection.severity : severity,
-                notes: previousSelection ? previousSelection.notes : ''
+            // Process recommendations from the API
+            response.data.recommendations.forEach(recommendation => {
+                // Check if this was previously selected (to preserve notes & user selections)
+                const previousSelection = userManualSelections.find(r => r.id === recommendation.id);
+                
+                // If it was previously selected OR it's a new recommendation, include it
+                if (previousSelection || !userManualSelections.some(r => r.id === recommendation.id)) {
+                    // Add to updatedRestrictions, preserving notes if existed
+                    updatedRestrictions.push({
+                        id: recommendation.id,
+                        name: recommendation.name,
+                        severity: previousSelection ? previousSelection.severity : recommendation.recommended_severity,
+                        notes: previousSelection ? previousSelection.notes : '',
+                        source_condition: recommendation.source_condition,
+                        is_recommended: true
+                    });
+                }
             });
+            
+            // Add any manually selected restrictions that weren't in the recommendations
+            userManualSelections.forEach(restriction => {
+                if (!updatedRestrictions.some(r => r.id === restriction.id)) {
+                    updatedRestrictions.push({
+                        ...restriction,
+                        is_recommended: false
+                    });
+                }
+            });
+            
+            // Set the form data with the new array to ensure reactivity
+            form.dietary_restrictions = updatedRestrictions;
         }
+    }).catch(error => {
+        console.error('Error fetching recommended restrictions:', error);
     });
-    
-    // Set the form data with the new array to ensure reactivity
-    form.dietary_restrictions = updatedRestrictions;
 };
 
 // Derive restriction severity based on medical condition severity
@@ -782,20 +787,29 @@ onMounted(() => {
                                 </h4>
                                 <div v-if="form.dietary_restrictions.length > 0" class="space-y-2">
                                     <div 
-                                        v-for="restriction in form.dietary_restrictions" 
-                                        :key="restriction.id"
-                                        class="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-md"
+                                        v-for="(restriction, index) in form.dietary_restrictions" 
+                                        :key="index"
+                                        class="flex items-center space-x-4 p-3 border border-gray-200 dark:border-gray-700 rounded-md"
                                     >
-                                        <div>
-                                            <span class="font-medium text-emerald-700 dark:text-emerald-300">
-                                                {{ restriction.name }}
-                                            </span>
-                                            <span class="ml-2 text-xs text-emerald-600 dark:text-emerald-400">
-                                                ({{ restriction.severity }})
-                                            </span>
-                                        </div>
-                                        <div v-if="restriction.notes" class="mt-1 sm:mt-0 text-xs text-gray-500 dark:text-gray-400">
-                                            {{ restriction.notes }}
+                                        <div class="flex-1">
+                                            <div class="flex items-center">
+                                                <span class="font-medium text-gray-900 dark:text-gray-100">
+                                                    {{ restriction.name }}
+                                                </span>
+                                                <span 
+                                                    v-if="restriction.is_recommended" 
+                                                    class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+                                                    title="Recommended based on your selected medical conditions"
+                                                >
+                                                    Recommended
+                                                </span>
+                                                <span 
+                                                    v-if="restriction.source_condition"
+                                                    class="ml-2 text-xs text-gray-500 dark:text-gray-400"
+                                                >
+                                                    (from {{ restriction.source_condition.name }})
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
