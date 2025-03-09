@@ -122,13 +122,16 @@ const toggleMedicalCondition = (condition) => {
 
 // Get recommended dietary restrictions based on selected medical conditions
 const updateRecommendedRestrictions = () => {
-    // If no medical conditions are selected, don't do anything
+    // If no medical conditions are selected, clear all recommended restrictions
+    // but keep manually selected ones
     if (form.medical_conditions.length === 0) {
+        // Keep only manually selected restrictions that aren't recommendations
+        form.dietary_restrictions = form.dietary_restrictions.filter(r => !r.is_recommended);
         return;
     }
     
     // Get a copy of all user manually selected restrictions to preserve them
-    const userManualSelections = [...form.dietary_restrictions];
+    const userManualSelections = [...form.dietary_restrictions].filter(r => !r.is_recommended);
     
     // Get condition IDs from selected conditions
     const conditionIds = form.medical_conditions.map(condition => condition.id);
@@ -144,20 +147,26 @@ const updateRecommendedRestrictions = () => {
             // Process recommendations from the API
             response.data.recommendations.forEach(recommendation => {
                 // Check if this was previously selected (to preserve notes & user selections)
-                const previousSelection = userManualSelections.find(r => r.id === recommendation.id);
+                const previousSelection = userManualSelections.find(r => 
+                    // Handle both temporary and permanent IDs
+                    (typeof r.id === 'string' && typeof recommendation.id === 'string' && 
+                     r.id === recommendation.id) || 
+                    (typeof r.id === 'number' && typeof recommendation.id === 'number' && 
+                     r.id === recommendation.id)
+                );
                 
-                // If it was previously selected OR it's a new recommendation, include it
-                if (previousSelection || !userManualSelections.some(r => r.id === recommendation.id)) {
-                    // Add to updatedRestrictions, preserving notes if existed
-                    updatedRestrictions.push({
-                        id: recommendation.id,
-                        name: recommendation.name,
-                        severity: previousSelection ? previousSelection.severity : recommendation.recommended_severity,
-                        notes: previousSelection ? previousSelection.notes : '',
-                        source_condition: recommendation.source_condition,
-                        is_recommended: true
-                    });
-                }
+                // Add to updatedRestrictions, preserving notes if existed
+                updatedRestrictions.push({
+                    id: recommendation.id,
+                    name: recommendation.name,
+                    description: recommendation.description,
+                    severity: previousSelection ? previousSelection.severity : recommendation.recommended_severity,
+                    notes: previousSelection ? previousSelection.notes : '',
+                    source_condition: recommendation.source_condition,
+                    is_recommended: true,
+                    is_ai_generated: recommendation.is_ai_generated || false,
+                    is_temporary: recommendation.is_temporary || false
+                });
             });
             
             // Add any manually selected restrictions that weren't in the recommendations
@@ -303,57 +312,50 @@ const isRestrictionRecommended = (restrictionId) => {
 
 // Navigate to next step
 const nextStep = () => {
-    // Validate current step before proceeding
-    const stepValidations = {
-        'medical-conditions': () => {
-            // Validate that at least one medical condition is selected
-            if (form.medical_conditions.length === 0) {
-                errors.value = { 'medical_conditions': 'Please select at least one medical condition' };
-                return false;
-            }
-            return true;
-        },
-        'dietary-restrictions': () => {
-            // No validation required for dietary restrictions as they may be optional
-            return true;
-        },
-        'profile-details': () => {
-            // Validate profile name
-            if (!form.name.trim()) {
-                errors.value = { 'name': 'Profile name is required' };
-                return false;
-            }
-            return true;
-        },
-        'review': () => true // No validation needed for review step
-    };
-
-    // Get validation function for current step
-    const validateStep = stepValidations[currentStep.value];
-    
-    // If validation passes, proceed to next step
-    if (validateStep && validateStep()) {
-        const stepsArray = Object.keys(props.steps);
-        const currentIndex = stepsArray.indexOf(currentStep.value);
-        
-        if (currentIndex < stepsArray.length - 1) {
-            // Clear errors before moving to next step
-            errors.value = {};
-            // Update step
-            currentStep.value = stepsArray[currentIndex + 1];
-            window.scrollTo(0, 0);
+    // Validation for current step
+    if (currentStep.value === 'medical-conditions') {
+        // Validate medical conditions step
+        if (form.medical_conditions.length === 0 && !form.no_medical_conditions) {
+            alert('Please select at least one medical condition or check "No medical conditions"');
+            return;
         }
+        
+        // Update recommended restrictions based on current selection
+        // This ensures they are fresh when navigating forward
+        updateRecommendedRestrictions();
+    } else if (currentStep.value === 'dietary-restrictions') {
+        // No specific validation for dietary restrictions step
+    } else if (currentStep.value === 'profile-details') {
+        // Validate profile details step
+        if (!form.name) {
+            alert('Please provide a name for your dietary profile');
+            return;
+        }
+    }
+
+    // Get the index of the current step
+    const currentIndex = Object.keys(props.steps).indexOf(currentStep.value);
+    
+    // If we're not at the last step, go to the next one
+    if (currentIndex < Object.keys(props.steps).length - 1) {
+        currentStep.value = Object.keys(props.steps)[currentIndex + 1];
     }
 };
 
 // Navigate to previous step
 const prevStep = () => {
-    const stepsArray = Object.keys(props.steps);
-    const currentIndex = stepsArray.indexOf(currentStep.value);
+    // Get the index of the current step
+    const currentIndex = Object.keys(props.steps).indexOf(currentStep.value);
     
+    // If we're at the review step, make sure to refresh the recommendations
+    // before going back to ensure any changes are reflected
+    if (currentStep.value === 'review') {
+        updateRecommendedRestrictions();
+    }
+    
+    // If we're not at the first step, go to the previous one
     if (currentIndex > 0) {
-        currentStep.value = stepsArray[currentIndex - 1];
-        window.scrollTo(0, 0);
+        currentStep.value = Object.keys(props.steps)[currentIndex - 1];
     }
 };
 
@@ -666,9 +668,26 @@ onMounted(() => {
                                                             />
                                                         </div>
                                                     </div>
-                                                    <p v-if="isRestrictionRecommended(restriction.id)" class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">
-                                                        Recommended based on your medical conditions
-                                                    </p>
+                                                    <span 
+                                                        v-if="restriction.is_recommended" 
+                                                        class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100"
+                                                        title="Recommended based on your selected medical conditions"
+                                                    >
+                                                        Recommended
+                                                    </span>
+                                                    <span 
+                                                        v-if="restriction.is_ai_generated" 
+                                                        class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                                        title="AI-enhanced recommendation based on current knowledge"
+                                                    >
+                                                        AI Enhanced
+                                                    </span>
+                                                    <span 
+                                                        v-if="restriction.source_condition"
+                                                        class="ml-2 text-xs text-gray-500 dark:text-gray-400"
+                                                    >
+                                                        (from {{ restriction.source_condition.name }})
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -802,6 +821,13 @@ onMounted(() => {
                                                     title="Recommended based on your selected medical conditions"
                                                 >
                                                     Recommended
+                                                </span>
+                                                <span 
+                                                    v-if="restriction.is_ai_generated" 
+                                                    class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                                    title="AI-enhanced recommendation based on current knowledge"
+                                                >
+                                                    AI Enhanced
                                                 </span>
                                                 <span 
                                                     v-if="restriction.source_condition"

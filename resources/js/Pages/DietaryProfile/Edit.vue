@@ -103,7 +103,13 @@ const updateRecommendedRestrictions = () => {
             // Process recommendations from the API
             response.data.recommendations.forEach(recommendation => {
                 // Check if this was previously selected (to preserve notes & user selections)
-                const previousSelection = userManualSelections.find(r => r.id === recommendation.id);
+                const previousSelection = userManualSelections.find(r => 
+                    // Handle both temporary and permanent IDs
+                    (typeof r.id === 'string' && typeof recommendation.id === 'string' && 
+                     r.id === recommendation.id) || 
+                    (typeof r.id === 'number' && typeof recommendation.id === 'number' && 
+                     r.id === recommendation.id)
+                );
                 
                 // If it was previously selected OR it's a new recommendation, include it
                 if (previousSelection || !userManualSelections.some(r => r.id === recommendation.id)) {
@@ -111,10 +117,13 @@ const updateRecommendedRestrictions = () => {
                     updatedRestrictions.push({
                         id: recommendation.id,
                         name: recommendation.name,
+                        description: recommendation.description,
                         severity: previousSelection ? previousSelection.severity : recommendation.recommended_severity,
                         notes: previousSelection ? previousSelection.notes : '',
                         source_condition: recommendation.source_condition,
-                        is_recommended: true
+                        is_recommended: true,
+                        is_ai_generated: recommendation.is_ai_generated || false,
+                        is_temporary: recommendation.is_temporary || false
                     });
                 }
             });
@@ -369,6 +378,13 @@ const selectedDietaryRestrictionId = ref('');
                                             title="Recommended based on your selected medical conditions"
                                         >
                                             Recommended
+                                        </span>
+                                        <span 
+                                            v-if="restriction.is_ai_generated" 
+                                            class="ml-2 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100"
+                                            title="AI-enhanced recommendation based on current knowledge"
+                                        >
+                                            AI Enhanced
                                         </span>
                                         <span 
                                             v-if="restriction.source_condition"

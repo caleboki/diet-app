@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\MedicalCondition;
+use App\Models\DietaryRestriction;
+use App\Services\LlmDietaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class MedicalConditionController extends Controller
@@ -152,10 +155,11 @@ class MedicalConditionController extends Controller
     }
 
     /**
-     * Get recommended dietary restrictions for selected medical conditions.
+     * Get recommended dietary restrictions based on selected medical conditions
      */
     public function getRecommendedRestrictions(Request $request)
     {
+        // Validate the incoming request
         $request->validate([
             'condition_ids' => 'required|array',
             'condition_ids.*' => 'required|integer|exists:medical_conditions,id',
@@ -164,15 +168,17 @@ class MedicalConditionController extends Controller
         $conditionIds = $request->input('condition_ids');
         $conditions = MedicalCondition::with('dietaryRestrictions')->findMany($conditionIds);
         
+        $llmService = new LlmDietaryService();
         $recommendations = [];
         
+        // Process each condition
         foreach ($conditions as $condition) {
+            // First, get standard recommendations from relationships
             foreach ($condition->dietaryRestrictions as $restriction) {
-                // Check if we already have this restriction in our recommendations
+                // Only add unique restrictions
                 $existingIndex = array_search($restriction->id, array_column($recommendations, 'id'));
                 
                 if ($existingIndex === false) {
-                    // Add new recommendation
                     $recommendations[] = [
                         'id' => $restriction->id,
                         'name' => $restriction->name,
@@ -182,8 +188,75 @@ class MedicalConditionController extends Controller
                         'source_condition' => [
                             'id' => $condition->id,
                             'name' => $condition->name
-                        ]
+                        ],
+                        'is_ai_generated' => false
                     ];
+                }
+            }
+            
+            // Then, check for LLM-enhanced recommendations if we have fewer than 3 standard ones
+            // This minimizes LLM API calls by only using them when needed
+            $conditionRestrictionCount = count($condition->dietaryRestrictions);
+            if ($conditionRestrictionCount < 3) {
+                // Get LLM recommendations with caching to minimize API calls
+                $llmRecommendations = $llmService->getRecommendationsForCondition($condition);
+                
+                // Process LLM recommendations
+                foreach ($llmRecommendations as $llmRec) {
+                    // Check if a similar restriction already exists
+                    $isSimilarToExisting = false;
+                    foreach ($recommendations as $existingRec) {
+                        // Simple similarity check - in production would use better algorithm
+                        if (similar_text(strtolower($llmRec['name']), strtolower($existingRec['name'])) > 60) {
+                            $isSimilarToExisting = true;
+                            break;
+                        }
+                    }
+                    
+                    // Only add if not similar to existing restrictions
+                    if (!$isSimilarToExisting) {
+                        // Find if this recommendation already exists in database
+                        $existingDbRestriction = DietaryRestriction::where('name', 'like', '%' . $llmRec['name'] . '%')
+                            ->first();
+                            
+                        if ($existingDbRestriction) {
+                            // Use existing database record
+                            $recommendations[] = [
+                                'id' => $existingDbRestriction->id,
+                                'name' => $existingDbRestriction->name,
+                                'description' => $existingDbRestriction->description ?? $llmRec['description'],
+                                'is_common_allergen' => $existingDbRestriction->is_common_allergen,
+                                'recommended_severity' => $llmRec['recommended_severity'],
+                                'source_condition' => [
+                                    'id' => $condition->id,
+                                    'name' => $condition->name
+                                ],
+                                'is_ai_generated' => true
+                            ];
+                            
+                            // Associate with this condition if not already
+                            if (!$condition->dietaryRestrictions->contains($existingDbRestriction->id)) {
+                                $condition->dietaryRestrictions()->attach($existingDbRestriction->id);
+                            }
+                        } else {
+                            // This is a novel recommendation - create a temporary ID for frontend
+                            // We'll persist it to database only if user selects it
+                            $tmpId = 'tmp_' . md5($llmRec['name'] . $condition->id);
+                            $recommendations[] = [
+                                'id' => $tmpId,
+                                'name' => $llmRec['name'],
+                                'description' => $llmRec['description'],
+                                'is_common_allergen' => false,
+                                'recommended_severity' => $llmRec['recommended_severity'],
+                                'source_condition' => [
+                                    'id' => $condition->id,
+                                    'name' => $condition->name
+                                ],
+                                'is_ai_generated' => true,
+                                'is_temporary' => true
+                            ];
+                        }
+                    }
                 }
             }
         }
