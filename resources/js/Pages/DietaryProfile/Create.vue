@@ -310,6 +310,23 @@ const isRestrictionRecommended = (restrictionId) => {
     );
 };
 
+// Add a computed property to sort dietary restrictions
+const sortedDietaryRestrictions = computed(() => {
+    // Create a copy to avoid mutating the original array
+    return [...props.commonDietaryRestrictions].sort((a, b) => {
+        // Check if restriction is in the recommended list
+        const aIsRecommended = form.dietary_restrictions.some(r => r.id === a.id && r.is_recommended);
+        const bIsRecommended = form.dietary_restrictions.some(r => r.id === b.id && r.is_recommended);
+        
+        // Sort by recommendation status (recommended first)
+        if (aIsRecommended && !bIsRecommended) return -1;
+        if (!aIsRecommended && bIsRecommended) return 1;
+        
+        // If both are recommended or both not recommended, sort alphabetically
+        return a.name.localeCompare(b.name);
+    });
+});
+
 // Navigate to next step
 const nextStep = () => {
     // Validation for current step
@@ -632,7 +649,7 @@ onMounted(() => {
                                 <div class="space-y-3">
                                     <!-- Common dietary restrictions -->
                                     <div 
-                                        v-for="restriction in props.commonDietaryRestrictions" 
+                                        v-for="restriction in sortedDietaryRestrictions" 
                                         :key="restriction.id"
                                         class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden"
                                     >
