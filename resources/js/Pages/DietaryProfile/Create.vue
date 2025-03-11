@@ -36,6 +36,7 @@ const customForm = reactive({
     description: ''
 });
 const customFormMessage = ref('');
+const showCustomForm = ref(false);
 
 // Filtered medical conditions based on search
 const filteredMedicalConditions = computed(() => {
@@ -91,6 +92,17 @@ const addCustomCondition = () => {
             customFormMessage.value = 'An error occurred while creating the custom condition';
         }
     });
+};
+
+// Toggle the custom form visibility
+const toggleCustomForm = () => {
+    showCustomForm.value = !showCustomForm.value;
+    // Clear the form and message when hiding
+    if (!showCustomForm.value) {
+        customForm.name = '';
+        customForm.description = '';
+        customFormMessage.value = '';
+    }
 };
 
 // Toggle a medical condition selection
@@ -553,12 +565,17 @@ onMounted(() => {
                         </div>
 
                         <div class="mt-10 pt-6 border-t border-gray-200 dark:border-gray-700">
-                            <div class="flex items-center mb-4">
+                            <div @click="toggleCustomForm" class="flex items-center justify-between cursor-pointer p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
                                 <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                                     Can't find your condition?
                                 </h3>
+                                <button type="button" class="p-1 rounded-full text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-800 focus:outline-none">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" :class="{ 'transform rotate-180': showCustomForm }" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
                             </div>
-                            <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                            <div v-if="showCustomForm" class="mt-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
                                 <form @submit.prevent="addCustomCondition">
                                   <div class="mb-4">
                                     <InputLabel for="custom-name" value="Condition Name" />
