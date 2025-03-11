@@ -345,7 +345,7 @@ const nextStep = () => {
     if (currentStep.value === 'medical-conditions') {
         // Validate medical conditions step
         if (form.medical_conditions.length === 0 && !form.no_medical_conditions) {
-            alert('Please select at least one medical condition or check "No medical conditions"');
+            alert('Please select at least one medical condition');
             return;
         }
         
