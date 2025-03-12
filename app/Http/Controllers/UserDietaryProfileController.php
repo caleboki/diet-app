@@ -433,17 +433,26 @@ class UserDietaryProfileController extends Controller
         $dietaryRestrictionData = [];
         
         foreach ($dietaryRestrictions as $restriction) {
+            // Skip any restriction with a non-numeric ID (temporary IDs)
+            if (!is_numeric($restriction['id']) || strpos($restriction['id'], 'tmp_') === 0) {
+                Log::warning("Skipping invalid dietary restriction ID: {$restriction['id']}");
+                continue;
+            }
+            
+            // Ensure ID is a valid integer
+            $id = (int)$restriction['id'];
+            
             // Get the highest severity from related medical conditions
             // In a real app, you'd have a mapping between medical conditions and dietary restrictions
             // For now, we'll use the highest severity from any medical condition as a simplification
             $calculatedSeverity = $this->calculateRestrictionSeverity($medicalConditions);
             
-            $dietaryRestrictionData[$restriction['id']] = [
+            $dietaryRestrictionData[$id] = [
                 'severity' => $calculatedSeverity,
                 'notes' => $restriction['notes'] ?? null
             ];
             
-            Log::info("Set dietary restriction {$restriction['id']} severity to {$calculatedSeverity}");
+            Log::info("Set dietary restriction {$id} severity to {$calculatedSeverity}");
         }
         
         $profile->dietaryRestrictions()->sync($dietaryRestrictionData);

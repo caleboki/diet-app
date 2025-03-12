@@ -390,18 +390,23 @@ const prevStep = () => {
 
 // Submit the form
 const submit = () => {
-    processing.value = true;
+    // Filter out any temporary IDs from dietary restrictions before submitting
+    const filteredDietaryRestrictions = form.dietary_restrictions.filter(restriction => {
+        // Check if the ID is a valid database ID (not a temporary one)
+        return typeof restriction.id === 'number' || 
+               (typeof restriction.id === 'string' && !restriction.id.startsWith('tmp_'));
+    });
     
-    form.post(route('dietary-profile.store'), {
-        onSuccess: () => {
-            console.log('Form submitted successfully');
-            processing.value = false;
-        },
-        onError: (errors) => {
-            console.error('Form submission errors:', errors);
-            processing.value = false;
-        },
-        preserveScroll: true
+    // Create a clean copy of the form data with filtered restrictions
+    const submissionData = {
+        ...form,
+        dietary_restrictions: filteredDietaryRestrictions
+    };
+    
+    // Submit the form with the clean data
+    router.post(route('dietary-profile.store'), submissionData, {
+        onStart: () => processing.value = true,
+        onFinish: () => processing.value = false,
     });
 };
 
@@ -593,7 +598,7 @@ onMounted(() => {
                                     <textarea
                                       id="custom-description"
                                       v-model="customForm.description"
-                                      class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 focus:ring-indigo-500 focus:ring-offset-2 rounded-md shadow-sm"
+                                      class="mt-1 block w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 focus:ring-indigo-500 focus:ring-offset-2 rounded-md shadow-sm text-sm"
                                       required
                                     ></textarea>
                                     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
